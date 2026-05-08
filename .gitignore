@@ -29,9 +29,12 @@ nohup.out
 *.db-journal
 *.db-wal
 *.db-shm
+*.db.backup*
+*.db.bak*
 *.sqlite
 *.sqlite3
 data/*.db
+data/*.db.*
 data/*.sqlite*
 
 # ===========================================
