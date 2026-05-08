@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MediaStation — Unraid Docker 模板
+  用法: 在 Unraid Docker 页面添加以下 XML 配置
+-->
+<Container>
+  <Name>MediaStation</Name>
+  <Repository>mediastation/mediastation:latest</Repository>
+  <Registry>https://hub.docker.com/r/mediastation/mediastation</Registry>
+  <Summary>Lightweight Home Media Server</Summary>
+  <Description>
+    MediaStation 是专为轻量 NAS 打造的家庭媒体服务器，融合了 Emby/Jellyfin 的媒体播放能力和 MoviePilot/NAStool 的自动化订阅下载能力。
+
+    特性:
+    - 内置 HLS 播放 + FFmpeg 转码
+    - TMDb/豆瓣/Bangumi 元数据刮削
+    - qBittorrent/Transmission/Aria2 下载
+    - 站点订阅 + RSS + 自动下载
+    - 海报墙 + DLNA 投屏
+    - AI 智能刮削
+
+    默认账号: admin / admin123
+  </Description>
+  <Category>Media:Media Server</Category>
+  <WebUI>http://[IP]:[PORT:3001]/</WebUI>
+  <Banner>https://raw.githubusercontent.com/your-repo/mediastation/main/docs/banner.png</Banner>
+  <Icon>https://raw.githubusercontent.com/your-repo/mediastation/main/docs/icon.png</Icon>
+  <BaseDir>/mnt/user/appdata/mediastation</BaseDir>
+
+  <!-- 端口配置 -->
+  <Ports>
+    <Port>
+      <ContainerPort>3001</ContainerPort>
+      <HostPort>3001</HostPort>
+      <Protocol>tcp</Protocol>
+    </Port>
+  </Ports>
+
+  <!-- 环境变量 -->
+  <Environment>
+    <Variable>
+      <Name>TZ</Name>
+      <Value>Asia/Shanghai</Value>
+      <Display>Timezone</Display>
+      <Description>时区设置</Description>
+    </Variable>
+    <Variable>
+      <Name>APP_SECRET_KEY</Name>
+      <Value></Value>
+      <Display>JWT Secret Key</Display>
+      <Description>JWT 签名密钥，留空自动生成</Description>
+      <Mask>true</Mask>
+    </Variable>
+    <Variable>
+      <Name>APP_DEBUG</Name>
+      <Value>false</Value>
+      <Display>Debug Mode</Display>
+      <Description>调试模式</Description>
+      <Mode>select</Mode>
+      <Options>
+        <Option>true</Option>
+        <Option>false</Option>
+      </Options>
+    </Variable>
+    <Variable>
+      <Name>TMDB_API_KEY</Name>
+      <Value></Value>
+      <Display>TMDb API Key</Display>
+      <Description>必填! 获取地址: https://www.themoviedb.org/settings/api</Description>
+      <Mask>true</Mask>
+    </Variable>
+    <Variable>
+      <Name>TMDB_LANGUAGE</Name>
+      <Value>zh-CN</Value>
+      <Display>TMDb Language</Display>
+      <Description>TMDb 语言</Description>
+    </Variable>
+    <Variable>
+      <Name>HW_ACCEL</Name>
+      <Value>auto</Value>
+      <Display>Hardware Acceleration</Display>
+      <Description>硬件加速: auto/qsv/vaapi/nvenc/none</Description>
+    </Variable>
+    <Variable>
+      <Name>MAX_TRANSCODE_JOBS</Name>
+      <Value>2</Value>
+      <Display>Max Transcode Jobs</Display>
+      <Description>最大并发转码任务数</Description>
+    </Variable>
+  </Environment>
+
+  <!-- 路径配置 -->
+  <Volumes>
+    <Volume>
+      <HostDir>/mnt/user/appdata/mediastation</HostDir>
+      <ContainerDir>/data</ContainerDir>
+      <Display>Config/Data</Display>
+      <Description>配置文件和数据目录</Description>
+      <Mode>rw</Mode>
+    </Volume>
+    <Volume>
+      <HostDir>/mnt/user/data/media/movies</HostDir>
+      <ContainerDir>/data/media/movies</ContainerDir>
+      <Display>Movies</Display>
+      <Description>电影目录</Description>
+      <Mode>rw</Mode>
+    </Volume>
+    <Volume>
+      <HostDir>/mnt/user/data/media/tv</HostDir>
+      <ContainerDir>/data/media/tv</ContainerDir>
+      <Display>TV Shows</Display>
+      <Description>电视剧目录</Description>
+      <Mode>rw</Mode>
+    </Volume>
+    <Volume>
+      <HostDir>/mnt/user/data/media/anime</HostDir>
+      <ContainerDir>/data/media/anime</ContainerDir>
+      <Display>Anime</Display>
+      <Description>动漫目录</Description>
+      <Mode>rw</Mode>
+    </Volume>
+    <Volume>
+      <HostDir>/mnt/user/data/downloads</HostDir>
+      <ContainerDir>/data/downloads</ContainerDir>
+      <Display>Downloads</Display>
+      <Description>下载目录</Description>
+      <Mode>rw</Mode>
+    </Volume>
+  </Volumes>
+
+  <!-- 设备映射 (可选) -->
+  <Devices>
+    <Device>
+      <Host>/dev/dri</Host>
+      <Container>/dev/dri</Container>
+      <Description>Intel GPU (QSV)</Description>
+      <Mode>rw</Mode>
+    </Device>
+  </Devices>
+
+  <!-- 资源配置 -->
+  <Resources>
+    <Memory>2048</Memory>
+    <MinMemory>512</MinMemory>
+    <MaxMemory>8192</MaxMemory>
+    <CPU>2000</CPU>
+    <MinCPU>100</MinCPU>
+  </Resources>
+
+  <!-- 卸载行为 -->
+  <Unraid>
+    <ShareFirst>true</ShareFirst>
+    <AlwaysStarted>true</AlwaysStarted>
+    <Custom>
+      <Post Arguments="--network=host --hostname=mediastation"/>
+    </Custom>
+  </Unraid>
+</Container>

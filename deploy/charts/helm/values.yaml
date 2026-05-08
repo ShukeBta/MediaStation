@@ -1,0 +1,272 @@
+# ============================================================
+#  MediaStation — Helm Chart Values
+#  Kubernetes 部署配置
+# ============================================================
+
+# ── 副本数 ──
+replicaCount: 1
+
+# ── 镜像配置 ──
+image:
+  repository: mediastation/mediastation
+  pullPolicy: IfNotPresent
+  # 指定版本，如 latest, v1.0.0
+  tag: ""
+
+# ── 镜像拉取密钥（私有仓库需要） ──
+imagePullSecrets: []
+# - name: regcred
+
+# ── 服务账号 ──
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# ── 服务配置 ──
+service:
+  type: ClusterIP
+  port: 3001
+  # NodePort 类型时指定端口
+  # nodePort: 30001
+  annotations: {}
+
+# ── 入口配置（Ingress） ──
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "86400"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "86400"
+    # SSE 长连接
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Connection '';
+      proxy_http_version 1.1;
+      proxy_buffering off;
+      proxy_cache off;
+  hosts:
+    - host: mediastation.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: mediastation-tls
+      hosts:
+        - mediastation.local
+
+# ── 资源配置 ──
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+    # NVIDIA GPU（需要 nvidia-device-plugin）
+    # nvidia.com/gpu: 1
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+# ── 节点选择器 ──
+nodeSelector: {}
+
+# ── 容忍设置 ──
+tolerations: []
+
+# ── 亲和性 ──
+affinity: {}
+
+# ── 优先级 ──
+priorityClassName: ""
+
+# ── 探针配置 ──
+livenessProbe:
+  httpGet:
+    path: /api/system/health
+    port: 3001
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /api/system/health
+    port: 3001
+  initialDelaySeconds: 15
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /api/system/health
+    port: 3001
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 30
+
+# ── 持久化存储 ──
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  # 数据目录
+  dataDir: /data
+  # 媒体目录（多个）
+  mediaDirs:
+    movies:
+      enabled: true
+      mountPath: /data/media/movies
+      hostPath: /mnt/media/movies
+      storageClass: ""
+      size: 100Gi
+      accessMode: ReadWriteMany  # NFS 或 Longhorn 支持
+    tv:
+      enabled: true
+      mountPath: /data/media/tv
+      hostPath: /mnt/media/tv
+      storageClass: ""
+      size: 100Gi
+      accessMode: ReadWriteMany
+    anime:
+      enabled: false
+      mountPath: /data/media/anime
+      hostPath: /mnt/media/anime
+      storageClass: ""
+      size: 50Gi
+      accessMode: ReadWriteMany
+    downloads:
+      enabled: true
+      mountPath: /data/downloads
+      hostPath: /mnt/downloads
+      storageClass: ""
+      size: 500Gi
+      accessMode: ReadWriteMany
+
+# ── 挂载配置 ──
+extraVolumes: []
+# - name: nfs-storage
+#   nfs:
+#     server: 192.168.1.100
+#     path: /share/nfs
+
+extraVolumeMounts: []
+# - name: nfs-storage
+#   mountPath: /mnt/nfs
+
+# ── 环境变量配置 ──
+env:
+  # 时区
+  TZ: Asia/Shanghai
+  # JWT 密钥（必须修改）
+  APP_SECRET_KEY: "change-me-to-a-random-string-in-production"
+  # 调试模式
+  APP_DEBUG: "false"
+  # 硬件加速
+  HW_ACCEL: "auto"
+  MAX_TRANSCODE_JOBS: "2"
+  # TMDb 语言
+  TMDB_LANGUAGE: zh-CN
+
+# ── 敏感信息（使用 Secret） ──
+secret:
+  # TMDb API Key（必填）
+  TMDB_API_KEY: ""
+  # 豆瓣 Cookie
+  DOUBAN_COOKIE: ""
+  # Bangumi Token
+  BANGUMI_TOKEN: ""
+  # qBittorrent
+  QB_HOST: ""
+  QB_USERNAME: ""
+  QB_PASSWORD: ""
+  # Transmission
+  TR_HOST: ""
+  TR_USERNAME: ""
+  TR_PASSWORD: ""
+  # Telegram
+  TELEGRAM_BOT_TOKEN: ""
+  TELEGRAM_CHAT_ID: ""
+  # 微信
+  WECHAT_SENDKEY: ""
+
+# ── 数据库配置 ──
+database:
+  # 内置 SQLite 或外部 PostgreSQL
+  type: sqlite  # sqlite | postgresql
+  external:
+    enabled: false
+    host: ""
+    port: 5432
+    database: mediastation
+    username: ""
+    # 密码使用 secret
+    existingSecret: ""
+    secretKey: "postgres-password"
+
+# ── GPU 配置 ──
+gpu:
+  enabled: false
+  type: nvidia  # nvidia | amd
+  resources:
+    nvidia.com/gpu: 1
+
+# ── 网络策略 ──
+networkPolicy:
+  enabled: false
+  # 允许访问的 CIDR
+  allowedCIDRs: []
+
+# ── Pod 注解 ──
+podAnnotations: {}
+# prometheus.io/scrape: "true"
+# prometheus.io/port: "3001"
+
+# ── Pod 安全上下文 ──
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# ── 容器安全上下文 ──
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+    add:
+      - NET_BIND_SERVICE
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: false
+
+# ── 初始化容器 ──
+initContainers: []
+# - name: fix-permissions
+#   image: busybox
+#   command: ["sh", "-c", "chown -R 1000:1000 /data"]
+#   volumeMounts:
+#     - name: data
+#       mountPath: /data
+
+# ── _sidecar 容器（日志收集等） ──
+sidecars: []
+# - name: log-collector
+#   image: busybox
+#   command: ["sh", "-c", "tail -f /var/log/mediastation/*.log"]
+#   volumeMounts:
+#     - name: logs
+#       mountPath: /var/log/mediastation
+
+# ── 调度策略 ──
+topologySpreadConstraints: []
+# - maxSkew: 1
+#   topologyKey: topology.kubernetes.io/zone
+#   whenUnsatisfiable: ScheduleAnyway
+#   labelSelector:
+#     matchLabels:
+#       app.kubernetes.io/name: mediastation

@@ -1,0 +1,163 @@
+# ============================================================
+#  MediaStation — TrueNAS SCALE Kubernetes Chart
+#  用法: 在 TrueNAS SCALE 的 "Apps" > "Custom App" 中导入此 YAML
+#  或通过 ix-chart 配置
+# ============================================================
+
+namespace: mediastation
+
+# ── 基础配置 ──
+globalGlossary:
+  enabled: false
+
+# ── 预留配置（ix-chart 格式） ──
+ix_certificate: {}
+ix_google_drive: {}
+ixVolumes: []
+ixChartConfig:
+  bibleverse: ""
+
+# ── 存储配置 ──
+# TrueNAS Scale 使用 PVC 进行存储管理
+storageClass:
+  enabled: false
+  type: ""
+  datasetName: ""
+  mountPath: /data
+
+# HostPath 存储（可选）
+hostPathVolumes:
+  - hostPath: /mnt/media/movies
+    mountPath: /data/media/movies
+    description: "Movies directory"
+  - hostPath: /mnt/media/tv
+    mountPath: /data/media/tv
+    description: "TV Shows directory"
+  - hostPath: /mnt/downloads
+    mountPath: /data/downloads
+    description: "Downloads directory"
+
+# ── 网络配置 ──
+service:
+  type: LoadBalancer
+  loadBalancerIP: ""
+  externalTrafficPolicy: Cluster
+  httpPort: 3001
+  httpsPort: ""
+  nodePort: ""
+
+ingress:
+  enabled: false
+  primary: true
+  hostName: mediastation.local
+  scaleCert: ""
+  ingressClassName: nginx
+
+# ── 资源限制 ──
+resources:
+  limits:
+    cpu: "2000m"
+    memory: "2Gi"
+  requests:
+    cpu: "100m"
+    memory: "256Mi"
+
+# ── 主容器配置 ──
+container:
+  repository: mediastation/mediastation
+  imageTag: latest
+  pullPolicy: IfNotPresent
+
+# ── 环境变量 ──
+env:
+  # 时区
+  TZ:
+    type: string
+    value: "Asia/Shanghai"
+
+  # JWT 密钥
+  APP_SECRET_KEY:
+    type: string
+    value: ""
+
+  # 调试模式
+  APP_DEBUG:
+    type: string
+    value: "false"
+
+  # 硬件加速
+  HW_ACCEL:
+    type: string
+    value: "auto"
+
+  # 最大转码任务
+  MAX_TRANSCODE_JOBS:
+    type: string
+    value: "2"
+
+# ── 敏感信息（使用 Secret） ──
+secret:
+  enabled: true
+  data:
+    TMDB_API_KEY:
+      type: string
+      description: "TMDb API Key (Required)"
+    DOUBAN_COOKIE:
+      type: string
+      description: "Douban Cookie (Optional)"
+    BANGUMI_TOKEN:
+      type: string
+      description: "Bangumi Token (Optional)"
+
+# ── 探针配置 ──
+probes:
+  liveness:
+    enabled: true
+    type: HTTP
+    host: ""
+    port: 3001
+    path: /api/system/health
+    scheme: HTTP
+    initialDelaySeconds: 30
+    timeoutSeconds: 10
+  readiness:
+    enabled: true
+    type: HTTP
+    host: ""
+    port: 3001
+    path: /api/system/health
+    scheme: HTTP
+    initialDelaySeconds: 15
+    timeoutSeconds: 10
+  startup:
+    enabled: true
+    type: HTTP
+    host: ""
+    port: 3001
+    path: /api/system/health
+    scheme: HTTP
+    initialDelaySeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+
+# ── GPU 配置 ──
+gpuConfiguration:
+  enabled: false
+  gpuSetting: ""
+
+# ── 容器安全 ──
+podSecurityContext:
+  enabled: false
+  runAsNonRoot: true
+  fsGroup: ""
+  supplementalGroups: []
+
+# ── 亲和性配置 ──
+affinity:
+  enabled: false
+  podAnti:
+    enabled: false
+  node: {}
+
+# ── 注释 ──
+annotations: {}

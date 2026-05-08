@@ -1,0 +1,53 @@
+# MediaStation 后端依赖
+# Web 框架
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.18
+
+# 数据库
+sqlalchemy>=2.0
+alembic>=1.14
+aiosqlite>=0.20
+
+# 配置 & 验证
+pydantic>=2.10
+pydantic-settings>=2.6
+
+# 认证
+python-jose[cryptography]>=3.3
+passlib[bcrypt]>=1.7
+bcrypt>=4.0,<5.0
+
+# HTTP 客户端
+httpx>=0.28
+
+# 任务调度
+apscheduler>=3.10
+
+# 缓存
+cachetools>=5.5
+
+# 文件处理
+aiofiles>=24.1
+
+# HTML 解析（站点适配）
+beautifulsoup4>=4.12
+lxml>=5.3
+
+# 图片处理
+Pillow>=10.0
+
+# SSE
+sse-starlette>=2.1
+
+# 日志
+structlog>=24.4
+
+# 系统监控
+psutil>=6.0
+
+# 环境变量
+python-dotenv>=1.0
+
+# 文件监控
+watchdog>=4.0

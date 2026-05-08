@@ -1,0 +1,161 @@
+{{/*
+MediaStation — Deployment
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mediastation.fullname" . }}
+  labels:
+    {{- include "mediastation.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "mediastation.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "mediastation.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "mediastation.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3001
+              protocol: TCP
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.persistence.dataDir }}
+            {{- range $name, $dir := .Values.persistence.mediaDirs }}
+            {{- if $dir.enabled }}
+            - name: media-{{ $name }}
+              mountPath: {{ $dir.mountPath }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          env:
+            - name: DATA_DIR
+              value: {{ .Values.persistence.dataDir }}
+            - name: TZ
+              value: {{ .Values.env.TZ | quote }}
+            - name: APP_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mediastation.fullname" . }}
+                  key: APP_SECRET_KEY
+                  optional: true
+            - name: APP_DEBUG
+              value: {{ .Values.env.APP_DEBUG | quote }}
+            - name: HW_ACCEL
+              value: {{ .Values.env.HW_ACCEL | quote }}
+            - name: MAX_TRANSCODE_JOBS
+              value: {{ .Values.env.MAX_TRANSCODE_JOBS | quote }}
+            - name: TMDB_LANGUAGE
+              value: {{ .Values.env.TMDB_LANGUAGE | quote }}
+            - name: TMDB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mediastation.fullname" . }}
+                  key: TMDB_API_KEY
+                  optional: true
+            {{- if .Values.database.type == "postgresql" }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mediastation.fullname" . }}
+                  key: DATABASE_URL
+                  optional: true
+            {{- end }}
+          {{- with .Values.sidecars }}
+          {{- toYaml . | nindent 8 }}
+          {{- end }}
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "mediastation.dataPVC" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- range $name, $dir := .Values.persistence.mediaDirs }}
+        {{- if $dir.enabled }}
+        - name: media-{{ $name }}
+          {{- if $dir.hostPath }}
+          hostPath:
+            path: {{ $dir.hostPath }}
+            type: DirectoryOrCreate
+          {{- else if $dir.nfs }}
+          nfs:
+            server: {{ $dir.nfs.server }}
+            path: {{ $dir.nfs.path }}
+          {{- else if $dir.storageClass }}
+          persistentVolumeClaim:
+            claimName: {{ $dir.existingClaim | default (printf "media-%s" $name) }}
+          {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}

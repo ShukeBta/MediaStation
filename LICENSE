@@ -1,0 +1,161 @@
+Business Source License 1.1
+
+Parameters
+------
+
+Licensor:             ShukeBta
+Licensed Work:        MediaStation
+                      (The "Licensed Work")
+Additional Use Grant: You may make production use of the Licensed Work, provided
+                      that in each instance you must clearly mark the following
+                      text in the source code:
+
+                      "This software uses the MediaStation Business Source 
+                      License. See LICENSE file for details."
+
+                      Additionally, this license grants the following rights:
+                      - Use for personal, non-commercial purposes: Unlimited
+                      - Use in organizations with 15 or fewer users: Unlimited
+                      - Use in organizations with more than 15 users: 
+                        PROHIBITED without purchasing a commercial license
+
+Change Date:          2027-05-01
+
+Change License:      GNU General Public License v3.0 or later
+
+Summary of Grant
+------
+
+This Business Source License is a free software license that allows you to use
+MediaStation for personal and internal business purposes under certain 
+restrictions. Commercial use and use in organizations exceeding 15 users 
+require a separate commercial license.
+
+Terms and Conditions
+------
+
+This Business Source License ("License") is between you ("You") and ShukeBta 
+("Licensor"). By downloading, copying, installing, or otherwise using the 
+Software, you agree to be bound by the terms and conditions of this License.
+
+1. Definitions
+
+   "Software" means MediaStation and all associated code, documentation, and 
+   materials provided by Licensor.
+
+   "User" means a human being who interacts with or uses the Software. API 
+   access and automated systems count as users for purposes of this License.
+
+   "Organization" means a company, corporation, non-profit, educational 
+   institution, government agency, or similar entity.
+
+2. Grant of Rights
+
+   Subject to the terms and conditions of this License, Licensor hereby grants 
+   You a worldwide, non-exclusive, non-transferable, limited license to:
+
+   a) Use, reproduce, modify, and distribute the Software for personal or 
+      internal business purposes;
+
+   b) Modify, adapt, and create derivative works of the Software, provided 
+      that any such derivative works are also licensed under this License;
+
+   c) Use the Software in an Organization with 15 or fewer Users.
+
+3. Restrictions
+
+   You may NOT:
+
+   a) Use the Software in an Organization with more than 15 Users without 
+      purchasing a commercial license;
+
+   b) Commercialize the Software, or any derivative works thereof, without 
+      Licensor's prior written consent;
+
+   c) Remove, alter, or obscure any proprietary notices, including copyright 
+      notices, patent markings, and disclaimer of warranty;
+
+   d) Use the Software for any unlawful purpose or in violation of any 
+      international, federal, state, or local laws or regulations;
+
+   e) Sublicense, sell, rent, lease, lend, or otherwise transfer rights to 
+      the Software without Licensor's prior written consent.
+
+4. Commercial License
+
+   To use the Software in an Organization with more than 15 Users, or for 
+   commercial purposes requiring a separate license, please contact the 
+   Licensor at the contact information provided in the Software documentation 
+   to obtain a Commercial License Agreement.
+
+5. Disclaimer of Warranty
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL 
+   THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+   DEALINGS IN THE SOFTWARE.
+
+6. Limitation of Liability
+
+   IN NO EVENT SHALL LICENSOR OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, 
+   INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES 
+   (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
+   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER 
+   CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT 
+   LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY 
+   OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH 
+   DAMAGE.
+
+7. Trademarks
+
+   This License does not grant permission to use the trade names, trademarks, 
+   service marks, or product names of Licensor, including "MediaStation", 
+   except as required for reasonable and customary use in describing the 
+   origin of the Software.
+
+8. Termination
+
+   This License is effective until terminated. Your rights under this License 
+   will terminate automatically without notice if You fail to comply with any 
+   of its terms. Upon termination, You must cease all use of the Software 
+   and destroy all copies in Your possession.
+
+9. Governing Law
+
+   This License shall be governed by and construed in accordance with the 
+   laws of the jurisdiction in which Licensor is based, without regard to its 
+   conflict of law provisions.
+
+Notice
+------
+
+This Software uses the MediaStation Business Source License.
+This license will change to the GNU General Public License v3.0 or later 
+on the Change Date specified above.
+
+For information about the GNU General Public License v3.0, visit:
+https://www.gnu.org/licenses/gpl-3.0.html
+
+For information about commercial licensing, contact:
+support@mediastation.dev
+
+================================================================================
+
+Additional Terms for Binary Distribution
+------
+
+If You distribute the Software in binary form, You must include the following 
+notice in the binary distribution:
+
+    "This software uses the MediaStation Business Source License.
+     See LICENSE file for details."
+
+For more details about the Business Source License, visit:
+https://mariadb.com/bsl11/
+
+================================================================================
+
+Copyright (c) 2024-2027 ShukeBta. All rights reserved.

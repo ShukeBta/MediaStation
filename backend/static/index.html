@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#4f46e5" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#6366f1" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="MediaStation" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="description" content="MediaStation - 轻量级家庭媒体服务器" />
+
+    <!-- PWA Manifest & Service Worker -->
+    <link rel="manifest" href="/manifest.json" />
+    <!-- Apple Touch Icon (generated from SVG) -->
+    <link rel="apple-touch-icon" href="/icon.svg" />
+
+    <title>MediaStation</title>
+    <!-- 防止主题切换闪烁：在 HTML 解析前就读取偏好并设置 class -->
+    <script>
+      (function() {
+        var theme = localStorage.getItem('ms-theme');
+        if (!theme) {
+          theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      })();
+
+      // PWA: Register Service Worker
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/sw.js').catch(function() {});
+        });
+      }
+
+      // PWA: Install prompt
+      let deferredPrompt = null;
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        deferredPrompt = e;
+        // 可以在这里显示自定义安装按钮
+      });
+    </script>
+    <script type="module" crossorigin src="/assets/index-Cd804MDs.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BT9mjUFl.css">
+  </head>
+  <body class="antialiased">
+    <div id="app"></div>
+  </body>
+</html>

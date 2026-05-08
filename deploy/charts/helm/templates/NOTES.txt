@@ -1,0 +1,41 @@
+Thank you for installing MediaStation!
+
+Your release is named {{ .Release.Name }}.
+
+To learn more about MediaStation, visit:
+- Documentation: https://github.com/your-repo/mediastation
+- GitHub: https://github.com/your-repo/mediastation
+
+__getting_started:
+
+1. Get the application URL by running these commands:
+{{- if .Values.ingress.enabled }}
+{{- range $host := .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}
+{{- end }}
+{{- else if contains "NodePort" .Values.service.type }}
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "mediastation.fullname" . }})
+  export NODE_IP=$(kubectl get nodes -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+{{- else if contains "LoadBalancer" .Values.service.type }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+  You can watch the status by running 'kubectl get svc -w {{ include "mediastation.fullname" . }}'
+
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "mediastation.fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  echo http://$SERVICE_IP:{{ .Values.service.port }}
+{{- else }}
+  kubectl port-forward svc/{{ include "mediastation.fullname" . }} 3001:3001
+  echo http://127.0.0.1:3001
+{{- end }}
+
+2. Login with default credentials:
+   Username: admin
+   Password: admin123
+
+__configuration:
+
+Please change the default credentials and configure:
+- TMDB_API_KEY: Required for media metadata
+- APP_SECRET_KEY: Generate with: openssl rand -hex 32
+
+For production deployments, use an external PostgreSQL database for better performance.

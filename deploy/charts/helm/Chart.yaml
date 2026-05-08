@@ -1,0 +1,34 @@
+# ============================================================
+#  MediaStation — Kubernetes Helm Chart
+#  用法:
+#  1. helm repo add mediastation https://your-repo.github.io/charts
+#  2. helm install mediastation mediastation/mediastation
+#  或本地安装:
+#  helm install mediastation ./charts/mediastation
+# ============================================================
+
+apiVersion: v2
+name: mediastation
+description: Lightweight Home Media Server for Kubernetes
+type: application
+version: 1.0.0
+appVersion: "latest"
+keywords:
+  - media-server
+  - plex
+  - jellyfin
+  - emby
+  - torrent
+  - download
+home: https://github.com/your-repo/mediastation
+sources:
+  - https://github.com/your-repo/mediastation
+maintainers:
+  - name: MediaStation
+    url: https://github.com/your-repo/mediastation
+
+# ── Helm 依赖 ──
+dependencies: []
+
+# ── Kubernetes 最低版本要求 ──
+kubeVersion: ">=1.24.0"

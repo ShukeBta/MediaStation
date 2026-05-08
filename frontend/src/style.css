@@ -1,0 +1,364 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================
+   CSS 变量主题系统
+   ========================================== */
+
+/* 深色主题 */
+.dark {
+  --bg-primary: #030712;
+  --bg-secondary: #0f172a;
+  --bg-card: rgba(17, 24, 39, 0.8);
+  --bg-card-solid: #111827;
+  --bg-input: #1f2937;
+  --bg-hover: #1f2937;
+  --bg-sidebar: #0f172a;
+
+  --text-primary: #f3f4f6;
+  --text-secondary: #d1d5db;
+  --text-muted: #6b7280;
+  --text-faint: #4b5563;
+
+  --border-primary: #1f2937;
+  --border-secondary: #374151;
+  --border-hover: #4b5563;
+
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --accent-subtle: rgba(99, 102, 241, 0.15);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+  --scrollbar-track: #111827;
+  --scrollbar-thumb: #374151;
+  --scrollbar-hover: #4b5563;
+
+  color-scheme: dark;
+}
+
+/* 浅色主题（默认 :root） */
+:root:not(.dark) {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #f1f5f9;
+  --bg-card: rgba(255, 255, 255, 0.85);
+  --bg-card-solid: #ffffff;
+  --bg-input: #f1f5f9;
+  --bg-hover: #e2e8f0;
+  --bg-sidebar: #ffffff;
+
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-faint: #94a3b8;
+
+  --border-primary: #e2e8f0;
+  --border-secondary: #cbd5e1;
+  --border-hover: #94a3b8;
+
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-subtle: rgba(79, 70, 229, 0.08);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+
+  --scrollbar-track: #f1f5f9;
+  --scrollbar-thumb: #cbd5e1;
+  --scrollbar-hover: #94a3b8;
+
+  color-scheme: light;
+}
+
+/* ==========================================
+   基础样式
+   ========================================== */
+
+html, body, #app {
+  @apply h-full m-0 p-0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 6px; height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover);
+}
+
+/* ==========================================
+   组件样式类
+   ========================================== */
+
+/* 深色卡片 */
+.card {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-primary);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.card:hover {
+  border-color: var(--border-secondary);
+}
+
+/* 输入框 */
+.input {
+  @apply w-full rounded-lg px-4 py-2 text-sm transition-all duration-200;
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+.input::placeholder {
+  color: var(--text-faint);
+}
+.input:focus {
+  @apply outline-none ring-2;
+  border-color: transparent;
+  --tw-ring-color: var(--accent);
+}
+
+/* 按钮 */
+.btn {
+  @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 select-none;
+  @apply focus:outline-none focus:ring-2 focus:ring-offset-2;
+}
+.btn:active {
+  transform: scale(0.97);
+}
+.btn-primary {
+  @apply btn text-white;
+  background: var(--accent);
+  @apply hover:brightness-110;
+  --tw-ring-color: var(--accent);
+  --tw-ring-offset-color: var(--bg-card-solid);
+}
+.btn-secondary {
+  @apply btn;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
+  @apply hover:bg-[var(--bg-hover)];
+}
+.btn-danger {
+  @apply btn text-white bg-red-500/80;
+  @apply hover:bg-red-500;
+  --tw-ring-color: var(--error);
+}
+
+/* 侧边栏导航 */
+.nav-item {
+  @apply flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150;
+  color: var(--text-muted);
+}
+.nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.nav-item.active {
+  background: var(--accent-subtle);
+  color: var(--accent-hover);
+}
+
+/* 进度条 */
+.progress-bar {
+  @apply h-2 rounded-full overflow-hidden;
+  background: var(--bg-input);
+}
+.progress-bar > div {
+  @apply h-full rounded-full transition-all duration-500;
+  background: var(--accent);
+}
+
+/* ==========================================
+   动画
+   ========================================== */
+
+/* 通用入场动画 */
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-in {
+  animation: fadeSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* 交错入场动画 */
+.stagger-in > * {
+  animation: fadeSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--stagger, 0) * 1ms);
+}
+
+/* 页面切换过渡 */
+.page-enter-active {
+  transition: all 0.2s ease-out;
+}
+.page-leave-active {
+  transition: all 0.15s ease-in;
+}
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+.page-leave-to {
+  opacity: 0;
+}
+
+/* Fade 过渡 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* Scale 过渡（弹窗） */
+.scale-enter-active {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.scale-leave-active {
+  transition: all 0.15s ease-in;
+}
+.scale-enter-from,
+.scale-leave-to {
+  opacity: 0;
+  transform: scale(0.95) translateY(8px);
+}
+
+/* Slide 过渡（侧边栏） */
+.slide-enter-active {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.slide-leave-active {
+  transition: transform 0.2s ease-in;
+}
+.slide-enter-from,
+.slide-leave-to {
+  transform: translateX(-100%);
+}
+
+/* ==========================================
+   工具类
+   ========================================== */
+
+/* 文本渐变 */
+.text-gradient {
+  background: linear-gradient(135deg, var(--accent-hover), var(--accent), #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* 玻璃效果 */
+.glass {
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* select option 暗色适配（仅深色模式需要） */
+.dark select option {
+  background: var(--bg-card-solid);
+  color: var(--text-secondary);
+}
+
+/* ==========================================
+   浅色模式补充适配
+   ========================================== */
+
+/* 浅色模式下部分组件的额外调整 */
+:root:not(.dark) .card {
+  box-shadow: var(--shadow-md);
+}
+
+:root:not(.dark) .btn-primary {
+  filter: none;
+}
+
+:root:not(.dark) .nav-item.active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+/* ==========================================
+   PWA & 移动端适配
+   ========================================== */
+
+/* 安全区域（刘海屏适配） */
+@supports (padding-top: env(safe-area-inset-top)) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* 触摸优化 - 移动端更大的点击区域 */
+@media (pointer: coarse) {
+  .btn, .nav-item, .input {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* 触摸设备上禁用 hover 效果（避免点击后的残留状态） */
+  @media (hover: none) {
+    .card:hover { border-color: var(--border-primary); }
+    .nav-item:hover { background: transparent; color: var(--text-muted); }
+  }
+}
+
+/* 横屏模式下的特殊布局 */
+@media (max-width: 768px) and (orientation: landscape) {
+  body {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+}
+
+/* PWA 全屏模式 */
+body.pwa-standalone {
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+/* 防止 iOS Safari 底部弹性滚动 */
+html {
+  position: fixed;
+  width: 100%;
+  height: 100%;
+}
+#app {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}

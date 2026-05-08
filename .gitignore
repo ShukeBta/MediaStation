@@ -1,0 +1,159 @@
+# ===========================================
+# Environment & Secrets
+# ===========================================
+.env
+.env.local
+.env.*.local
+.env.production
+*.env
+credentials.json
+*.pem
+*.key
+ssl/
+
+# ===========================================
+# Logs
+# ===========================================
+*.log
+logs/
+*.log.*
+backend*.log
+frontend*.log
+uvicorn*.log
+nohup.out
+
+# ===========================================
+# Database
+# ===========================================
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+data/*.db
+data/*.sqlite*
+
+# ===========================================
+# Python
+# ===========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+ENV/
+env/
+.venv/
+
+# ===========================================
+# Node.js
+# ===========================================
+node_modules/
+.npm
+.yarn-integrity
+.npmrc
+yarn.lock
+package-lock.json
+
+# ===========================================
+# Frontend Build
+# ===========================================
+dist/
+dist-ssr/
+*.local
+*.ico
+*.icns
+
+# ===========================================
+# IDE
+# ===========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.vimrc
+.sublime*
+
+# ===========================================
+# OS
+# ===========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ===========================================
+# Temporary Files
+# ===========================================
+*.tmp
+*.temp
+.cache/
+.temp/
+tmp/
+.tmp/
+*.bak
+*.backup
+*.old
+*-backup/
+
+# ===========================================
+# Test & Coverage
+# ===========================================
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+.tox/
+.nox/
+
+# ===========================================
+# Backend specific
+# ===========================================
+*.pid
+nul
+*.pid
+backend.pid
+server.pid
+
+# ===========================================
+# Frontend specific
+# ===========================================
+*.tsbuildinfo
+vite.config.ts.timestamp-*
+vue-tsconfig.json
+
+# ===========================================
+# PM2
+# ===========================================
+.pm2/
+.pm2_history
+
+# ===========================================
+# Private / Closed Source
+# ===========================================
+license_server/
+
