@@ -25,19 +25,16 @@ from app.system.events import get_event_bus
 
 router = APIRouter(prefix="", tags=["media"])
 
-
 # ── 媒体库 ──
 @router.get("/libraries", response_model=list[LibraryOut])
 async def list_libraries(user: CurrentUser, db: DB):
     service = MediaService(MediaRepository(db), get_event_bus())
     return await service.list_libraries()
 
-
 @router.post("/libraries", response_model=LibraryOut)
 async def create_library(data: LibraryCreate, user: AdminUser, db: DB):
     service = MediaService(MediaRepository(db), get_event_bus())
     return await service.create_library(data)
-
 
 # ── 子路由（必须放在 {library_id} 之前）──
 @router.post("/libraries/{library_id}/scan", response_model=ScanResult)
@@ -45,19 +42,16 @@ async def scan_library(library_id: int, user: AdminUser, db: DB):
     service = MediaService(MediaRepository(db), get_event_bus())
     return await service.scan_library(library_id, auto_scrape=True)
 
-
 # ── 主路由：{library_id} 必须在子路由之后 ──
 @router.put("/libraries/{library_id}", response_model=LibraryOut)
 async def update_library(library_id: int, data: LibraryUpdate, user: AdminUser, db: DB):
     service = MediaService(MediaRepository(db), get_event_bus())
     return await service.update_library(library_id, data)
 
-
 @router.delete("/libraries/{library_id}", status_code=204)
 async def delete_library(library_id: int, user: AdminUser, db: DB):
     service = MediaService(MediaRepository(db), get_event_bus())
     await service.delete_library(library_id)
-
 
 # ── 媒体条目 ──
 @router.get("/media", response_model=PaginatedResponse)
@@ -83,12 +77,10 @@ async def list_media(
         genre=genre, year_min=year_min, year_max=year_max, rating_min=rating_min,
     )
 
-
 @router.get("/media/recent", response_model=list[MediaItemOut])
 async def recent_media(user: CurrentUser, db: DB, limit: int = Query(10, ge=1, le=50)):
     service = MediaService(MediaRepository(db), get_event_bus())
     return await service.get_recent_items(limit)
-
 
 # ── 统计（必须放在 {item_id} 之前）──
 @router.get("/media/stats")
@@ -96,25 +88,21 @@ async def media_stats(user: CurrentUser, db: DB):
     service = MediaService(MediaRepository(db), get_event_bus())
     return await service.get_stats()
 
-
 @router.get("/media/{item_id}", response_model=MediaItemDetail)
 async def get_media(item_id: int, user: CurrentUser, db: DB):
     service = MediaService(MediaRepository(db), get_event_bus())
     return await service.get_item_detail(item_id)
-
 
 @router.delete("/media/{item_id}", status_code=204)
 async def delete_media(item_id: int, user: AdminUser, db: DB):
     service = MediaService(MediaRepository(db), get_event_bus())
     await service.delete_item(item_id)
 
-
 @router.put("/media/{item_id}", response_model=MediaItemDetail)
 async def update_media(item_id: int, data: MediaItemUpdate, user: AdminUser, db: DB):
     """手动编辑媒体条目元数据"""
     service = MediaService(MediaRepository(db), get_event_bus())
     return await service.update_item_metadata(item_id, data)
-
 
 # ── 刮削 ──
 @router.post("/media/{item_id}/scrape", response_model=MediaItemDetail)
@@ -126,7 +114,6 @@ async def scrape_media(item_id: int, request: ScrapeRequest, user: AdminUser, db
         logger.error(f"[Scrape] Error scraping item {item_id}: {e}", exc_info=True)
         raise
 
-
 @router.get("/search/tmdb")
 async def search_tmdb(
     user: CurrentUser,
@@ -136,7 +123,6 @@ async def search_tmdb(
 ):
     service = MediaService(MediaRepository(None), get_event_bus())
     return await service.search_tmdb(query, media_type, page)
-
 
 @router.get("/search/douban")
 async def search_douban(
@@ -150,7 +136,6 @@ async def search_douban(
     results = await client.search(query, media_type)
     return {"results": results, "total": len(results)}
 
-
 @router.get("/search/bangumi")
 async def search_bangumi(
     user: CurrentUser,
@@ -161,7 +146,6 @@ async def search_bangumi(
     client = get_bangumi_client()
     results = await client.search(query)
     return {"results": results, "total": len(results)}
-
 
 # ── 全局搜索 ──
 @router.get("/search")
@@ -176,7 +160,6 @@ async def global_search(
     repo = MediaRepository(db)
     items = await repo.search_items(q, limit=limit)
     return [MediaItemOut.model_validate(i) for i in items]
-
 
 @router.get("/search/advanced")
 async def advanced_search(
@@ -273,7 +256,6 @@ async def advanced_search(
         "pages": (total + page_size - 1) // page_size,
     }
 
-
 @router.get("/search/mixed")
 async def mixed_search(
     user: CurrentUser,
@@ -310,7 +292,6 @@ async def mixed_search(
             "total": tmdb_result.get("total_results", 0),
         },
     }
-
 
 @router.get("/recommend")
 async def get_recommendations(
@@ -353,7 +334,6 @@ async def get_recommendations(
         "total": len(items),
         "strategy": "rating_and_recent",
     }
-
 
 @router.get("/recommend/similar/{item_id}")
 async def get_similar_media(
@@ -438,7 +418,6 @@ async def get_similar_media(
         },
     }
 
-
 # ── 字幕管理 ──
 @router.get("/media/{item_id}/subtitles", response_model=list[SubtitleOut])
 async def list_subtitles(item_id: int, user: CurrentUser, db: DB):
@@ -446,7 +425,6 @@ async def list_subtitles(item_id: int, user: CurrentUser, db: DB):
     repo = MediaRepository(db)
     subs = await repo.get_subtitles_by_item(item_id)
     return [SubtitleOut.model_validate(s) for s in subs]
-
 
 @router.post("/media/{item_id}/subtitles/scan")
 async def scan_subtitles(item_id: int, user: AdminUser, db: DB):
@@ -456,7 +434,6 @@ async def scan_subtitles(item_id: int, user: AdminUser, db: DB):
     found = await service.scan_external_subtitles(item_id)
     return {"found": len(found), "subtitles": [SubtitleOut.model_validate(s) for s in found]}
 
-
 @router.post("/media/{item_id}/subtitles/extract")
 async def extract_subtitles(item_id: int, user: AdminUser, db: DB):
     """检测内嵌字幕流"""
@@ -464,7 +441,6 @@ async def extract_subtitles(item_id: int, user: AdminUser, db: DB):
     service = SubtitleService(MediaRepository(db))
     streams = await service.extract_embedded_subtitles(item_id)
     return {"streams": streams, "total": len(streams)}
-
 
 @router.post("/media/{item_id}/subtitles/extract/{stream_index}")
 async def extract_subtitle_stream(
@@ -504,7 +480,6 @@ async def extract_subtitle_stream(
 
     return {"path": output, "subtitle": SubtitleOut.model_validate(sub)}
 
-
 @router.post("/media/{item_id}/subtitles/upload")
 async def upload_subtitle(
     item_id: int,
@@ -527,7 +502,6 @@ async def upload_subtitle(
     )
     return SubtitleOut.model_validate(sub)
 
-
 @router.get("/subtitles/{subtitle_id}/content")
 async def get_subtitle_content(subtitle_id: int, user: CurrentUser, db: DB):
     """获取字幕文件内容"""
@@ -538,7 +512,6 @@ async def get_subtitle_content(subtitle_id: int, user: CurrentUser, db: DB):
         from fastapi import HTTPException
         raise HTTPException(404, "Subtitle not found or cannot be read")
     return {"content": content}
-
 
 @router.delete("/subtitles/{subtitle_id}")
 async def delete_subtitle(
@@ -553,19 +526,10 @@ async def delete_subtitle(
         raise HTTPException(404, "Subtitle not found")
     return {"success": True}
 
-
-# ── AI 刮削 ──
-class AIScrapeRequest(BaseModel):
-    """AI 刮削请求"""
-    operations: list[str] = ["overview", "title", "tags", "validate"]
-    apply: bool = True  # 是否直接应用到媒体条目
-
-
 # ── Adult Provider 测试 ──
 class ScrapeTestRequest(BaseModel):
     """Adult Provider 刮削测试请求"""
     code: str = "FC2-PPV-1234"
-
 
 class ScrapeTestResponse(BaseModel):
     """Adult Provider 刮削测试响应"""
@@ -575,7 +539,6 @@ class ScrapeTestResponse(BaseModel):
     studio: str | None = None
     message: str | None = None
     source: str | None = None  # javbus / javdb / microservice
-
 
 @router.post("/media/scrape/test", response_model=ScrapeTestResponse)
 async def test_adult_scrape(
@@ -636,101 +599,7 @@ async def test_adult_scrape(
         finally:
             await provider.close()
 
-
-@router.post("/media/{item_id}/ai-scrape")
-async def ai_scrape_media(
-    item_id: int,
-    request: AIScrapeRequest,
-    user: AdminUser,
-    db: DB,
-):
-    """使用 AI 优化/补充/验证媒体元数据"""
-    from app.media.ai_scraper import get_ai_scraper, AIScrapeResult
-    scraper = get_ai_scraper()
-    if not scraper.is_configured():
-        from fastapi import HTTPException
-        raise HTTPException(400, "AI scraper not configured. Please set OPENAI_API_KEY and OPENAI_BASE_URL in settings.")
-
-    # 获取当前媒体条目
-    service = MediaService(MediaRepository(db), get_event_bus())
-    item_detail = await service.get_item_detail(item_id)
-
-    # 准备当前元数据
-    current_meta = {
-        "title": item_detail.title,
-        "original_title": item_detail.original_title,
-        "overview": item_detail.overview,
-        "year": item_detail.year,
-        "genres": item_detail.genres or [],
-        "rating": item_detail.rating,
-    }
-
-    # 执行 AI 刮削
-    result = await scraper.scrape(
-        title=item_detail.title,
-        media_type=item_detail.media_type,
-        operations=request.operations,
-        current_metadata=current_meta,
-        file_name=None,
-    )
-
-    # 如果要求应用结果，写入数据库
-    if result.success and request.apply:
-        update_data: dict = {}
-        if result.overview:
-            update_data["overview"] = result.overview
-        if result.title:
-            update_data["title"] = result.title
-        if result.original_title:
-            update_data["original_title"] = result.original_title
-        if result.tags:
-            update_data["genres"] = result.tags
-
-        if update_data:
-            await service.repo.update_item(item_id, **update_data)
-
-    return {
-        "success": result.success,
-        "error": result.error,
-        "data": {
-            "overview": result.overview,
-            "title": result.title,
-            "original_title": result.original_title,
-            "tags": result.tags,
-            "is_valid": result.is_valid,
-            "confidence": result.confidence,
-        },
-        "model_used": result.model_used,
-        "tokens_used": result.tokens_used,
-        "applied": request.apply and result.success,
-    }
-
-
-@router.post("/ai-scrape/config/test")
-async def test_ai_config(user: AdminUser):
-    """测试 AI API 连接配置"""
-    from app.media.ai_scraper import get_ai_scraper
-    scraper = get_ai_scraper()
-    if not scraper.is_configured():
-        return {"configured": False, "error": "No API key configured"}
-
-    try:
-        result = await scraper.scrape(
-            title="Test Movie",
-            media_type="movie",
-            operations=["validate"],
-            current_metadata={"title": "Test Movie"},
-        )
-        return {
-            "configured": True,
-            "connected": result.success,
-            "model": scraper.model,
-            "base_url": scraper.base_url,
-            "error": result.error,
-        }
-    except Exception as e:
-        return {"configured": True, "connected": False, "error": str(e)}
-
+# ── 收藏/书签 ──
 
 # ── 收藏/书签 ──
 @router.post("/media/{item_id}/favorite")
@@ -739,7 +608,6 @@ async def add_favorite(item_id: int, user: CurrentUser, db: DB):
     repo = MediaRepository(db)
     await repo.add_favorite(user.id, item_id)
     return {"favorited": True, "media_item_id": item_id}
-
 
 @router.delete("/media/{item_id}/favorite", status_code=204)
 async def remove_favorite(item_id: int, user: CurrentUser, db: DB):
@@ -750,14 +618,12 @@ async def remove_favorite(item_id: int, user: CurrentUser, db: DB):
         from fastapi import HTTPException
         raise HTTPException(404, "未找到该收藏记录")
 
-
 @router.get("/media/{item_id}/favorite/status")
 async def check_favorite(item_id: int, user: CurrentUser, db: DB):
     """检查是否已收藏"""
     repo = MediaRepository(db)
     is_fav = await repo.is_favorite(user.id, item_id)
     return {"is_favorite": is_fav}
-
 
 @router.get("/favorites")
 async def list_favorites(
@@ -777,7 +643,6 @@ async def list_favorites(
         page_size=page_size,
     )
 
-
 # ── 重复检测 ──
 @router.post("/libraries/{library_id}/duplicates/hash")
 async def compute_file_hashes(
@@ -790,13 +655,11 @@ async def compute_file_hashes(
     service = MediaService(MediaRepository(db), get_event_bus())
     return await service.compute_file_hashes(library_id, limit)
 
-
 @router.post("/libraries/{library_id}/duplicates/scan")
 async def scan_duplicates(library_id: int, user: AdminUser, db: DB):
     """检测并标记媒体库中的重复文件"""
     service = MediaService(MediaRepository(db), get_event_bus())
     return await service.detect_duplicates(library_id)
-
 
 @router.get("/libraries/{library_id}/duplicates")
 async def get_duplicates(library_id: int, user: CurrentUser, db: DB):
@@ -804,13 +667,11 @@ async def get_duplicates(library_id: int, user: CurrentUser, db: DB):
     service = MediaService(MediaRepository(db), get_event_bus())
     return await service.get_duplicates(library_id)
 
-
 @router.delete("/libraries/{library_id}/duplicates", status_code=204)
 async def unmark_duplicates(library_id: int, user: AdminUser, db: DB):
     """取消媒体库中所有重复标记"""
     service = MediaService(MediaRepository(db), get_event_bus())
     await service.unmark_duplicates(library_id)
-
 
 @router.post("/media/{item_id}/duplicate/unmark")
 async def unmark_single_duplicate(item_id: int, user: AdminUser, db: DB):
@@ -819,7 +680,6 @@ async def unmark_single_duplicate(item_id: int, user: AdminUser, db: DB):
     repo = MediaRepository(db)
     await repo.update_item(item_id, is_duplicate=False, duplicate_of=None)
     return {"success": True, "media_item_id": item_id}
-
 
 # ── 文件整理 ──
 @router.post("/media/organize")
@@ -869,469 +729,10 @@ async def organize_media(
         "errors": result.errors,
     }
 
-
-# ═══════════════════════════════════════════════════════════════════════
-# AI 场景识别  /api/media/:id/ai/*
-# ═══════════════════════════════════════════════════════════════════════
-
-class _BaseModel(BaseModel):
-    pass
-
-
-class ChapterCreate(_BaseModel):
-    """手动创建章节"""
-    title: str
-    start_time: float
-    end_time: float | None = None
-    description: str | None = None
-
-
-class HighlightCreate(_BaseModel):
-    """手动标注精彩片段"""
-    title: str | None = None
-    start_time: float
-    end_time: float
-    score: float = 5.0
-    tags: list[str] = []
-
-
-async def _get_media_or_404(item_id: int, db):
-    """获取媒体条目，不存在时抛出 404"""
-    from app.media.models import MediaItem
-    from sqlalchemy import select
-    from fastapi import HTTPException
-    result = await db.execute(select(MediaItem).where(MediaItem.id == item_id))
-    item = result.scalar_one_or_none()
-    if not item:
-        raise HTTPException(404, f"媒体条目 {item_id} 不存在")
-    return item
-
-
 # ── 章节 API ──
-
-@router.post("/media/{item_id}/ai/chapters", summary="AI 生成章节")
-async def ai_generate_chapters(item_id: int, user: AdminUser, db: DB):
-    """
-    使用 AI 自动分析视频，生成章节列表。
-    基于场景切换检测和内容分析，智能划分章节边界。
-    """
-    from app.media.models import MediaChapter
-    from sqlalchemy import select, delete
-    import random, math
-
-    item = await _get_media_or_404(item_id, db)
-    duration = item.duration or 3600  # 默认 1 小时
-
-    # 模拟 AI 章节生成（实际应集成 PySceneDetect 或 FFmpeg scene detection）
-    chapter_titles_templates = [
-        ["片头", "正片开始", "情节发展", "高潮部分", "结局", "彩蛋"],
-        ["Opening", "Act I", "Act II", "Climax", "Resolution", "Credits"],
-        ["开场", "第一幕", "转折点", "冲突高峰", "结局"],
-    ]
-    titles = random.choice(chapter_titles_templates)
-    n = len(titles)
-    interval = duration / n
-
-    # 先删除旧的 AI 生成章节
-    await db.execute(
-        delete(MediaChapter).where(
-            MediaChapter.media_item_id == item_id,
-            MediaChapter.source == "ai"
-        )
-    )
-
-    chapters = []
-    for i, title in enumerate(titles):
-        start = math.floor(i * interval)
-        end = math.floor((i + 1) * interval) if i < n - 1 else None
-        confidence = round(random.uniform(0.75, 0.98), 3)
-        chapter = MediaChapter(
-            media_item_id=item_id,
-            title=title,
-            start_time=start,
-            end_time=end,
-            source="ai",
-            confidence=confidence,
-        )
-        db.add(chapter)
-        chapters.append(chapter)
-
-    await db.commit()
-    for ch in chapters:
-        await db.refresh(ch)
-
-    return {
-        "item_id": item_id,
-        "chapters": [
-            {
-                "id": ch.id,
-                "title": ch.title,
-                "start_time": ch.start_time,
-                "end_time": ch.end_time,
-                "confidence": ch.confidence,
-                "source": ch.source,
-            }
-            for ch in chapters
-        ],
-        "total": len(chapters),
-        "message": f"AI 已生成 {len(chapters)} 个章节",
-    }
-
-
-@router.get("/media/{item_id}/chapters", summary="获取章节列表")
-async def get_chapters(item_id: int, user: CurrentUser, db: DB):
-    """获取媒体条目的所有章节（AI 生成 + 手动创建）"""
-    from app.media.models import MediaChapter
-    from sqlalchemy import select
-
-    await _get_media_or_404(item_id, db)
-
-    result = await db.execute(
-        select(MediaChapter)
-        .where(MediaChapter.media_item_id == item_id)
-        .order_by(MediaChapter.start_time.asc())
-    )
-    chapters = result.scalars().all()
-
-    return {
-        "item_id": item_id,
-        "chapters": [
-            {
-                "id": ch.id,
-                "title": ch.title,
-                "start_time": ch.start_time,
-                "end_time": ch.end_time,
-                "description": ch.description,
-                "thumbnail_url": ch.thumbnail_url,
-                "source": ch.source,
-                "confidence": ch.confidence,
-                "created_at": ch.created_at.isoformat() if ch.created_at else None,
-            }
-            for ch in chapters
-        ],
-        "total": len(chapters),
-    }
-
-
-@router.post("/media/{item_id}/chapters", summary="手动创建章节")
-async def create_chapter(item_id: int, data: ChapterCreate, user: AdminUser, db: DB):
-    """手动创建章节标记"""
-    from app.media.models import MediaChapter
-
-    await _get_media_or_404(item_id, db)
-
-    chapter = MediaChapter(
-        media_item_id=item_id,
-        title=data.title,
-        start_time=data.start_time,
-        end_time=data.end_time,
-        description=data.description,
-        source="manual",
-        confidence=1.0,
-    )
-    db.add(chapter)
-    await db.commit()
-    await db.refresh(chapter)
-
-    return {
-        "id": chapter.id,
-        "media_item_id": chapter.media_item_id,
-        "title": chapter.title,
-        "start_time": chapter.start_time,
-        "end_time": chapter.end_time,
-        "source": chapter.source,
-    }
-
-
-@router.delete("/media/{item_id}/chapters/{chapter_id}", status_code=204, summary="删除章节")
-async def delete_chapter(item_id: int, chapter_id: int, user: AdminUser, db: DB):
-    """删除指定章节"""
-    from app.media.models import MediaChapter
-    from sqlalchemy import select
-    from fastapi import HTTPException
-
-    result = await db.execute(
-        select(MediaChapter).where(
-            MediaChapter.id == chapter_id,
-            MediaChapter.media_item_id == item_id
-        )
-    )
-    chapter = result.scalar_one_or_none()
-    if not chapter:
-        raise HTTPException(404, "章节不存在")
-
-    await db.delete(chapter)
-    await db.commit()
-
-
-# ── 精彩片段 API ──
-
-@router.post("/media/{item_id}/ai/highlights", summary="AI 提取精彩片段")
-async def ai_extract_highlights(
-    item_id: int,
-    user: AdminUser,
-    db: DB,
-    max_count: int = Query(5, ge=1, le=20, description="最多提取数量"),
-):
-    """
-    使用 AI 自动提取视频精彩片段。
-    基于音频能量、视觉变化、字幕情感分析等多维度评分。
-    """
-    from app.media.models import MediaHighlight
-    from sqlalchemy import delete
-    import random, json
-
-    item = await _get_media_or_404(item_id, db)
-    duration = item.duration or 3600
-
-    # 删除旧的 AI 精彩片段
-    await db.execute(
-        delete(MediaHighlight).where(
-            MediaHighlight.media_item_id == item_id,
-            MediaHighlight.source == "ai"
-        )
-    )
-
-    tag_pool = [["action", "intense"], ["emotional", "touching"], ["comedy", "funny"],
-                ["suspense", "thriller"], ["dialogue", "key_scene"], ["music", "soundtrack"]]
-
-    highlights = []
-    positions = sorted(random.sample(range(10, int(duration) - 120), min(max_count, max(1, int(duration // 300)))))
-
-    for i, pos in enumerate(positions[:max_count]):
-        clip_duration = random.uniform(30, 120)
-        score = round(random.uniform(6.0, 9.8), 2)
-        tags = random.choice(tag_pool)
-        h = MediaHighlight(
-            media_item_id=item_id,
-            title=f"精彩片段 {i + 1}",
-            start_time=pos,
-            end_time=min(pos + clip_duration, duration),
-            score=score,
-            tags=json.dumps(tags, ensure_ascii=False),
-            source="ai",
-        )
-        db.add(h)
-        highlights.append(h)
-
-    await db.commit()
-    for h in highlights:
-        await db.refresh(h)
-
-    return {
-        "item_id": item_id,
-        "highlights": [
-            {
-                "id": h.id,
-                "title": h.title,
-                "start_time": h.start_time,
-                "end_time": h.end_time,
-                "score": h.score,
-                "tags": h.tags,
-                "source": h.source,
-            }
-            for h in highlights
-        ],
-        "total": len(highlights),
-        "message": f"AI 已提取 {len(highlights)} 个精彩片段",
-    }
-
-
-@router.get("/media/{item_id}/highlights", summary="获取精彩片段列表")
-async def get_highlights(
-    item_id: int,
-    user: CurrentUser,
-    db: DB,
-    sort_by: str = Query("score", description="排序字段: score | start_time"),
-):
-    """获取媒体条目的精彩片段列表，按评分或时间排序"""
-    from app.media.models import MediaHighlight
-    from sqlalchemy import select
-    import json
-
-    await _get_media_or_404(item_id, db)
-
-    sort_col = MediaHighlight.score.desc() if sort_by == "score" else MediaHighlight.start_time.asc()
-    result = await db.execute(
-        select(MediaHighlight)
-        .where(MediaHighlight.media_item_id == item_id)
-        .order_by(sort_col)
-    )
-    highlights = result.scalars().all()
-
-    return {
-        "item_id": item_id,
-        "highlights": [
-            {
-                "id": h.id,
-                "title": h.title,
-                "start_time": h.start_time,
-                "end_time": h.end_time,
-                "duration": round(h.end_time - h.start_time, 1),
-                "score": h.score,
-                "tags": json.loads(h.tags) if h.tags else [],
-                "thumbnail_url": h.thumbnail_url,
-                "source": h.source,
-                "created_at": h.created_at.isoformat() if h.created_at else None,
-            }
-            for h in highlights
-        ],
-        "total": len(highlights),
-    }
-
 
 # ── 封面候选 API ──
 
-@router.post("/media/{item_id}/ai/covers", summary="AI 生成封面候选")
-async def ai_generate_covers(
-    item_id: int,
-    user: AdminUser,
-    db: DB,
-    count: int = Query(6, ge=1, le=12, description="候选封面数量"),
-):
-    """
-    使用 AI 自动生成封面候选图片。
-    基于视频内容质量评分，选取最佳帧作为封面候选。
-    """
-    from app.media.models import MediaCoverCandidate
-    from sqlalchemy import delete
-    import random
-
-    item = await _get_media_or_404(item_id, db)
-    duration = item.duration or 3600
-
-    # 删除旧的 AI 生成封面候选（保留手动添加的）
-    await db.execute(
-        delete(MediaCoverCandidate).where(
-            MediaCoverCandidate.media_item_id == item_id,
-            MediaCoverCandidate.source == "ai"
-        )
-    )
-
-    covers = []
-    # 均匀分布在视频中（跳过前5%和后5%以避免片头片尾）
-    safe_start = duration * 0.05
-    safe_end = duration * 0.95
-    positions = [safe_start + (safe_end - safe_start) * i / count for i in range(count)]
-
-    for i, ts in enumerate(positions):
-        score = round(random.uniform(5.0, 9.5), 2)
-        # 生成 thumbnail URL（实际应由 FFmpeg 截帧）
-        thumb_url = f"/api/media/{item_id}/thumbnail?t={int(ts)}"
-        is_selected = (i == 0)  # 默认选中第一个
-
-        c = MediaCoverCandidate(
-            media_item_id=item_id,
-            url=thumb_url,
-            timestamp=round(ts, 2),
-            score=score,
-            is_selected=is_selected,
-            source="ai",
-        )
-        db.add(c)
-        covers.append(c)
-
-    await db.commit()
-    for c in covers:
-        await db.refresh(c)
-
-    return {
-        "item_id": item_id,
-        "covers": [
-            {
-                "id": c.id,
-                "url": c.url,
-                "timestamp": c.timestamp,
-                "score": c.score,
-                "is_selected": c.is_selected,
-                "source": c.source,
-            }
-            for c in covers
-        ],
-        "total": len(covers),
-        "message": f"AI 已生成 {len(covers)} 个封面候选",
-    }
-
-
-@router.get("/media/{item_id}/covers", summary="获取封面候选列表")
-async def get_covers(item_id: int, user: CurrentUser, db: DB):
-    """获取媒体条目的所有封面候选"""
-    from app.media.models import MediaCoverCandidate
-    from sqlalchemy import select
-
-    await _get_media_or_404(item_id, db)
-
-    result = await db.execute(
-        select(MediaCoverCandidate)
-        .where(MediaCoverCandidate.media_item_id == item_id)
-        .order_by(MediaCoverCandidate.score.desc())
-    )
-    covers = result.scalars().all()
-
-    return {
-        "item_id": item_id,
-        "covers": [
-            {
-                "id": c.id,
-                "url": c.url,
-                "timestamp": c.timestamp,
-                "score": c.score,
-                "is_selected": c.is_selected,
-                "source": c.source,
-                "created_at": c.created_at.isoformat() if c.created_at else None,
-            }
-            for c in covers
-        ],
-        "total": len(covers),
-        "selected": next((c.id for c in covers if c.is_selected), None),
-    }
-
-
-@router.post("/media/{item_id}/covers/{cover_id}/select", summary="选择封面")
-async def select_cover(item_id: int, cover_id: int, user: AdminUser, db: DB):
-    """
-    将指定封面候选设为当前封面，同时更新媒体条目的 poster_url。
-    """
-    from app.media.models import MediaCoverCandidate, MediaItem
-    from sqlalchemy import select, update
-    from fastapi import HTTPException
-
-    # 获取目标封面
-    result = await db.execute(
-        select(MediaCoverCandidate).where(
-            MediaCoverCandidate.id == cover_id,
-            MediaCoverCandidate.media_item_id == item_id
-        )
-    )
-    cover = result.scalar_one_or_none()
-    if not cover:
-        raise HTTPException(404, f"封面候选 {cover_id} 不存在")
-
-    # 取消所有其他封面的选中状态
-    await db.execute(
-        update(MediaCoverCandidate)
-        .where(MediaCoverCandidate.media_item_id == item_id)
-        .values(is_selected=False)
-    )
-
-    # 设置选中状态
-    cover.is_selected = True
-
-    # 同步更新媒体条目的 poster_url
-    await db.execute(
-        update(MediaItem)
-        .where(MediaItem.id == item_id)
-        .values(poster_url=cover.url)
-    )
-
-    await db.commit()
-
-    return {
-        "item_id": item_id,
-        "cover_id": cover_id,
-        "url": cover.url,
-        "message": "封面已更新",
-    }
 
 
 @router.get("/media/{item_id}/thumbnail", summary="获取视频截帧")

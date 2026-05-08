@@ -311,7 +311,6 @@ def init_provider_chain(settings: Settings) -> ProviderChain:
     from .tmdb import TMDbProvider
     from .douban import DoubanProvider
     from .bangumi import BangumiProvider
-    from .ai_provider import AIProvider
     from .adult import AdultProvider, AdultProviderConfig
 
     global _chain_instance
@@ -334,7 +333,7 @@ def init_provider_chain(settings: Settings) -> ProviderChain:
     chain.add_provider(TMDbProvider(settings))        # 优先级 10
     chain.add_provider(DoubanProvider())            # 优先级 20
     chain.add_provider(BangumiProvider())            # 优先级 30
-    chain.add_provider(AIProvider())                # AI Provider 作为兜底
+    # AI Provider 已移除（开源版不再包含 AI 功能）
 
     _chain_instance = chain
     return chain

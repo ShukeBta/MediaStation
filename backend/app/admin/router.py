@@ -1017,3 +1017,18 @@ async def storage_status_overview(user: AdminUser):
                           if _storage_configs.get(k) and _storage_configs[k].get("enabled")),
         }
     })
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 播放配置（Profiles）- 本地模式stub
+# ═══════════════════════════════════════════════════════════════════════
+
+_profiles = [
+    {"id": "default", "name": "默认配置", "type": "directplay", "quality": "original"},
+]
+
+
+@router.get("/profiles", summary="获取播放配置列表")
+async def list_profiles(user: AdminUser):
+    """获取播放配置列表"""
+    return SuccessResponse.ok(_profiles)

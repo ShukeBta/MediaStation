@@ -38,32 +38,6 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Database initialized")
 
-    # 验证授权状态，设置系统 tier
-    try:
-        from app.license.service import check_system_license
-        from app.user.models import SystemConfig
-        from sqlalchemy import select
-        from app.database import async_session_factory
-
-        async with async_session_factory() as session:
-            is_plus = await check_system_license(session)
-            result = await session.execute(
-                select(SystemConfig).where(SystemConfig.key == "user_tier")
-            )
-            config = result.scalar_one_or_none()
-            if is_plus:
-                if not config:
-                    session.add(SystemConfig(key="user_tier", value="plus"))
-                else:
-                    config.value = "plus"
-            else:
-                if config:
-                    config.value = "free"
-            await session.commit()
-        logger.info(f"License check: system tier = {'PLUS' if is_plus else 'FREE'}")
-    except Exception as e:
-        logger.warning(f"License check failed: {e}")
-
     # 创建默认管理员
     from app.database import async_session_factory
     from app.user.repository import UserRepository
@@ -179,17 +153,14 @@ from app.download.router import router as download_router
 from app.subscribe.router import router as subscribe_router
 from app.system.router import router as system_router
 from app.emby_api import router as emby_router
-from app.dlna.router import router as dlna_router
 from app.media.discover_router import router as discover_router
 from app.system.api_config_router import router as api_config_router
 from app.system.settings_router import router as settings_router
 from app.admin.router import router as admin_router
 from app.stats.router import router as stats_router
 from app.playlist.router import router as playlist_router
-from app.profiles.router import router as profiles_router
-from app.assistant.router import router as assistant_router
 from app.strm.router import router as strm_router
-from app.license.router import router as license_router
+from app.dlna import router as dlna_router
 
 API_PREFIX = "/api"
 
@@ -201,17 +172,14 @@ app.include_router(download_router, prefix=API_PREFIX)
 app.include_router(subscribe_router, prefix=API_PREFIX)
 app.include_router(system_router, prefix=API_PREFIX)
 app.include_router(emby_router, prefix=API_PREFIX)
-app.include_router(dlna_router, prefix=API_PREFIX)
 app.include_router(discover_router, prefix=API_PREFIX)
 app.include_router(api_config_router, prefix=API_PREFIX)
 app.include_router(settings_router, prefix=API_PREFIX)
 app.include_router(admin_router, prefix=API_PREFIX)
 app.include_router(stats_router, prefix=API_PREFIX)
 app.include_router(playlist_router, prefix=API_PREFIX)
-app.include_router(profiles_router, prefix=API_PREFIX)
-app.include_router(assistant_router, prefix=API_PREFIX)
 app.include_router(strm_router, prefix=API_PREFIX)
-app.include_router(license_router, prefix=API_PREFIX)
+app.include_router(dlna_router, prefix=API_PREFIX)
 
 
 # ── 静态文件（前端构建产物） ──

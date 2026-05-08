@@ -98,7 +98,7 @@ async def init_db():
     import app.system.models
     import app.system.api_config_models
     import app.playback.models
-    import app.license.models      # 新增：授权管理模型
+    # import app.license.models      # 授权管理模型（可选）
 
     eng = get_engine()
     settings = get_settings()

@@ -1,0 +1,127 @@
+# ============================================================
+#  MediaStation — Docker Compose 部署模板
+#  用法: cp docker-compose.example.yml docker-compose.yml
+#        然后根据实际环境修改标注了 ⚠️ 的配置项
+#        docker compose up -d
+# ============================================================
+
+services:
+  # ── 主服务 ──
+  mediastation:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: mediastation:latest
+    container_name: mediastation
+    restart: unless-stopped
+    ports:
+      - "${MS_PORT:-3001}:3001"
+    environment:
+      # ── 时区 ──
+      - TZ=Asia/Shanghai
+
+      # ── 应用 ──
+      - APP_SECRET_KEY=${MS_SECRET_KEY:-please-change-this-to-a-random-string}  # ⚠️ 必须修改
+      - APP_DEBUG=${MS_DEBUG:-false}
+
+      # ── 数据库（留空则使用 SQLite） ──
+      # - DATABASE_URL=postgresql+asyncpg://mediastation:mediastation123@postgres:5432/mediastation
+
+      # ── TMDb（必填，获取媒体元数据） ──
+      - TMDB_API_KEY=${TMDB_API_KEY}  # ⚠️ 必填，https://www.themoviedb.org/settings/api
+      - TMDB_LANGUAGE=zh-CN
+
+      # ── 豆瓣（可选，补充中文元数据） ──
+      # - DOUBAN_COOKIE=your-douban-cookie
+
+      # ── Bangumi（可选，动漫元数据） ──
+      # - BANGUMI_TOKEN=your-bangumi-token
+
+      # ── qBittorrent（可选，启用下载功能时配置） ──
+      # - QB_HOST=http://192.168.1.100:8080
+      # - QB_USERNAME=admin
+      # - QB_PASSWORD=adminadmin
+
+      # ── Transmission（可选，替代 qBittorrent） ──
+      # - TR_HOST=http://192.168.1.100:9091
+      # - TR_USERNAME=
+      # - TR_PASSWORD=
+
+      # ── Telegram 通知（可选） ──
+      # - TELEGRAM_BOT_TOKEN=your-bot-token
+      # - TELEGRAM_CHAT_ID=your-chat-id
+
+      # ── 微信通知（可选，Server酱） ──
+      # - WECHAT_SENDKEY=your-sendkey
+
+      # ── Bark 通知（可选，iOS） ──
+      # - BARK_SERVER=https://api.day.app
+      # - BARK_KEY=your-bark-key
+
+      # ── 转码 ──
+      - HW_ACCEL=${MS_HW_ACCEL:-auto}        # auto/qsv/vaapi/nvenc/videotoolbox/none
+      - MAX_TRANSCODE_JOBS=${MS_MAX_TRANSCODE:-2}
+    volumes:
+      # 持久化数据（数据库、缓存、转码临时文件）
+      - ./data:/data
+      # 媒体文件目录（根据实际路径修改） ⚠️
+      - ${MS_MOVIES_DIR:-./media/movies}:/data/media/movies
+      - ${MS_TV_DIR:-./media/tv}:/data/media/tv
+      - ${MS_ANIME_DIR:-./media/anime}:/data/media/anime
+      # 下载目录（与下载客户端共享） ⚠️
+      - ${MS_DOWNLOAD_DIR:-./downloads}:/data/downloads
+    # 硬件加速设备映射（可选，Intel QSV / AMD VAAPI）
+    devices:
+      - /dev/dri:/dev/dri
+    networks:
+      - mediastation-net
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/system/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ── 可选：PostgreSQL（大规模媒体库，万级以上媒体文件时启用） ──
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: mediastation-postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: mediastation
+  #     POSTGRES_USER: mediastation
+  #     POSTGRES_PASSWORD: mediastation123
+  #   volumes:
+  #     - ./postgres-data:/var/lib/postgresql/data
+  #   networks:
+  #     - mediastation-net
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U mediastation"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # ── 可选：qBittorrent（如果 NAS 上未单独部署） ──
+  # qbittorrent:
+  #   image: linuxserver/qbittorrent:latest
+  #   container_name: mediastation-qb
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8080:8080"    # WebUI
+  #     - "6881:6881"    # BT
+  #     - "6881:6881/udp"
+  #   environment:
+  #     - PUID=1000
+  #     - PGID=1000
+  #     - WEBUI_PORT=8080
+  #     - TZ=Asia/Shanghai
+  #   volumes:
+  #     - ./qb-config:/config
+  #     - ${MS_DOWNLOAD_DIR:-./downloads}:/downloads  # 与 MediaStation 共享下载目录
+  #   networks:
+  #     - mediastation-net
+
+networks:
+  mediastation-net:
+    driver: bridge

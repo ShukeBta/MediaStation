@@ -317,6 +317,113 @@ class QBittorrentAdapter(DownloadClientAdapter):
         logger.warning("无法获取新添加任务的 hash")
         return None
 
+    def _calc_torrent_hash(self, torrent_content: bytes) -> str | None:
+        """从种子文件内容计算 info_hash
+
+        使用 SHA1(info_dict) 计算 hash，这是 BitTorrent 协议的标准。
+
+        Args:
+            torrent_content: 原始种子文件内容
+
+        Returns:
+            40位的 info_hash (hex 字符串)，失败返回 None
+        """
+        import hashlib
+
+        try:
+            # 解析 Bencode 数据
+            def bencode_read(data, pos=0):
+                if data[pos:pos+1] == b'i':
+                    # 整数
+                    end = data.index(b'e', pos)
+                    return int(data[pos+1:end]), end + 1
+                elif data[pos:pos+1] == b'l':
+                    # 列表
+                    pos += 1
+                    items = []
+                    while data[pos:pos+1] != b'e':
+                        item, pos = bencode_read(data, pos)
+                        items.append(item)
+                    return items, pos + 1
+                elif data[pos:pos+1] == b'd':
+                    # 字典
+                    pos += 1
+                    items = {}
+                    while data[pos:pos+1] != b'e':
+                        key, pos = bencode_read(data, pos)
+                        value, pos = bencode_read(data, pos)
+                        items[key] = value
+                    return items, pos + 1
+                elif data[pos:pos+1].isdigit():
+                    # 字节串
+                    colon = data.index(b':', pos)
+                    length = int(data[pos:colon])
+                    value = data[colon+1:colon+1+length]
+                    return value, colon + 1 + length
+                else:
+                    raise ValueError(f"Invalid bencode at position {pos}")
+
+            # 解析种子
+            decoded, _ = bencode_read(torrent_content)
+
+            # 提取 info 字典并重新编码
+            info_dict = decoded.get(b'info')
+            if not info_dict:
+                return None
+
+            # 重新编码 info 字典
+            def bencode_encode(data):
+                if isinstance(data, int):
+                    return f"i{data}e".encode()
+                elif isinstance(data, bytes):
+                    return f"{len(data)}:".encode() + data
+                elif isinstance(data, str):
+                    return f"{len(data)}:".encode() + data.encode()
+                elif isinstance(data, list):
+                    return b'l' + b''.join(bencode_encode(item) for item in data) + b'e'
+                elif isinstance(data, dict):
+                    # 注意：Bencode 字典的键必须是 bytes 且按字典序排列
+                    result = b'd'
+                    for key in sorted(data.keys(), key=lambda k: (isinstance(k, bytes) and k or k.encode()) if isinstance(k, str) else k):
+                        value = data[key]
+                        key_bytes = key.encode() if isinstance(key, str) else key
+                        result += bencode_encode(key_bytes) + bencode_encode(value)
+                    return result + b'e'
+                else:
+                    raise ValueError(f"Cannot bencode: {type(data)}")
+
+            info_bencoded = bencode_encode(info_dict)
+            info_hash = hashlib.sha1(info_bencoded).hexdigest()
+            return info_hash.lower()
+        except Exception as e:
+            logger.debug(f"计算种子 hash 失败: {e}")
+            return None
+
+    async def _find_existing_torrent_hash(self, info_hash: str) -> str | None:
+        """在 qBittorrent 中查找已存在的种子
+
+        Args:
+            info_hash: 要查找的 info hash
+
+        Returns:
+            找到的 info hash，失败返回 None
+        """
+        try:
+            resp = await self.client.get(
+                f"{self.API}/torrents/info",
+                headers=self._auth_headers(),
+            )
+            if resp.status_code == 200:
+                torrents = resp.json()
+                for t in torrents:
+                    if t.get("hash", "").lower() == info_hash.lower():
+                        logger.info(f"找到已存在的种子: {t.get('name', '')} (hash: {info_hash})")
+                        return info_hash
+            return None
+        except Exception as e:
+            logger.debug(f"查找已存在种子失败: {e}")
+            return None
+
     async def _construct_magnet(self, tracker_url: str, name: str = "") -> str:
         """从 tracker URL 构造磁力链
 
@@ -402,6 +509,18 @@ class QBittorrentAdapter(DownloadClientAdapter):
                     if torrent_hash:
                         return torrent_hash
                     return "torrent-base64"
+                elif resp_text.lower() == "fails.":
+                    # 种子可能已存在，尝试从现有种子中找到匹配的
+                    logger.warning(f"qBittorrent 返回 Fails，可能是种子已存在，尝试查找...")
+                    # 验证种子文件格式以获取 hash
+                    info_hash = self._calc_torrent_hash(torrent_content)
+                    if info_hash:
+                        # 尝试获取已存在种子的 hash
+                        existing_hash = await self._find_existing_torrent_hash(info_hash)
+                        if existing_hash:
+                            logger.info(f"找到已存在的种子 hash: {existing_hash}")
+                            return existing_hash
+                    raise Exception(f"qBittorrent 添加种子失败: {resp_text} (种子可能已存在)")
                 else:
                     # 任何非成功响应都视为失败（包括中文错误消息）
                     raise Exception(f"qBittorrent 添加种子失败: {resp_text}")

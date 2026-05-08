@@ -14,15 +14,18 @@ WORKDIR /app
 COPY license_server/package*.json ./
 RUN npm ci --production
 
-# 拷贝源码
-COPY license_server/ ./
+# 仅复制许可证服务器源码（排除数据文件和敏感配置）
+COPY license_server/package.json ./
+COPY license_server/server.js ./
+COPY license_server/routes/ ./routes/
 
-# 创建数据目录
-RUN mkdir -p /app/data && chown - node:node /app/data
+# 创建数据目录（运行时挂载）
+RUN mkdir -p /app/data && chown -R node:node /app/data
 
-# 环境变量
+# 环境变量（从 docker-compose 注入）
 ENV NODE_ENV=production
 ENV PORT=3001
+# LICENSE_ADMIN_API_KEY 和 LICENSE_HMAC_SECRET 必须通过环境变量注入
 
 # 暴露端口
 EXPOSE 3001

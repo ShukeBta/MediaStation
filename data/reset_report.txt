@@ -1,0 +1,18 @@
+
+# 安全重置报告 - mediastation.db
+生成时间: 1778223623.1645832
+
+## 新密码（本地用户）
+- admin: pExgvUa1sXE1xWOC
+
+## 新 API Keys
+- TMDB: b54ac05fd7702207b5c6dd103218f134
+- M-Team: f0a0f292a0f4161c8fda750706b837f2
+
+## 下载客户端
+- qBittorrent: kDEKMZsnQXhsbSUS
+
+## 需要手动更新的服务
+1. TMDB 账户: https://www.themoviedb.org/settings/api
+2. M-Team: https://api.m-team.cc/
+3. qBittorrent Web UI: http://127.0.0.1:8080

@@ -235,22 +235,24 @@ class DownloadService:
 
                 for torrent in torrents:
                     # 首先用 info_hash 匹配
+                    # 注意：可能有重复记录，使用 .first() 而不是 .scalar_one_or_none()
                     task = None
                     if torrent.hash and len(torrent.hash) in (32, 40):
                         result = await self.db.execute(
                             select(DownloadTask).where(
                                 DownloadTask.info_hash == torrent.hash
-                            )
+                            ).limit(1)
                         )
                         task = result.scalar_one_or_none()
 
                     # 若 hash 匹配不到，尝试用种子名称 + 客户端 ID 回退匹配
+                    # 注意：可能有多条记录匹配名称，使用 .first() 而不是 .scalar_one_or_none()
                     if not task and torrent.name:
                         result = await self.db.execute(
                             select(DownloadTask).where(
                                 DownloadTask.client_id == client_db.id,
                                 DownloadTask.torrent_name == torrent.name,
-                            )
+                            ).limit(1)
                         )
                         task = result.scalar_one_or_none()
 

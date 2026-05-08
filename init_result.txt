@@ -1,0 +1,21 @@
+开始初始化 API 配置表...
+表创建成功
+✅ 已初始化/确认: tmdb
+✅ 已初始化/确认: douban
+✅ 已初始化/确认: bangumi
+✅ 已初始化/确认: thetvdb
+✅ 已初始化/确认: fanart
+✅ 已初始化/确认: openai
+✅ 已初始化/确认: siliconflow
+✅ 已初始化/确认: deepseek
+
+数据库中现有 8 条 API 配置：
+  bangumi         | ✅ | Bangumi - 番剧/动画元数据源
+  deepseek        | ✅ | DeepSeek - 国产大模型 API
+  douban          | ✅ | 豆瓣 - 中文元数据补充源
+  fanart          | ✅ | Fanart.tv - 高质量图片增强源
+  openai          | ✅ | OpenAI 兼容 API - AI 刮削和智能增强
+  siliconflow     | ✅ | 硅基流动 - 国产 AI API 平替
+  thetvdb         | ✅ | TheTVDB - 剧集增强数据源
+  tmdb            | ✅ | TMDb API - 电影/剧集主数据源
+初始化完成!

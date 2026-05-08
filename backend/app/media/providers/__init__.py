@@ -17,7 +17,6 @@ __all__ = [
     "TMDbProvider",
     "DoubanProvider",
     "BangumiProvider",
-    "AIProvider",
     "AdultProvider",
 ]
 
@@ -33,9 +32,6 @@ def __getattr__(name: str):
     if name == "BangumiProvider":
         from . import bangumi
         return bangumi.BangumiProvider
-    if name == "AIProvider":
-        from . import ai_provider
-        return ai_provider.AIProvider
     if name == "AdultProvider":
         from . import adult
         return adult.AdultProvider

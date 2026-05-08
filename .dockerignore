@@ -1,4 +1,4 @@
-# ===========================================
+﻿# ===========================================
 # Docker 构建忽略文件
 # ===========================================
 
@@ -7,21 +7,45 @@
 .gitignore
 .gitattributes
 
-# 环境变量 (不应该在镜像里)
+# 环境变量 (必须排除，防止敏感信息泄露)
+**/.env
 .env
 .env.*
+.env
 *.env
+**/.env.local
+**/.env.production
+**/.env.*.local
+
+# 敏感配置文件
+**/secrets.json
+**/credentials.json
+**/*.pem
+**/*.key
+**/id_rsa*
 
 # 日志
 *.log
 logs/
 *.log.*
+**/*.log
+**/logs/
 
-# 数据库
-*.db
-*.db-*
-data/*.db
-data/*.sqlite*
+# 数据库 (禁止打包)
+**/*.db
+**/*.db-*
+**/*.sqlite
+**/*.sqlite3
+data/
+**/data/
+backend/data/
+license_server/data/
+
+# 缓存目录
+**/cache/
+**/__pycache__/
+**/.pytest_cache/
+**/node_modules/.cache/
 
 # Python
 __pycache__/
@@ -55,6 +79,7 @@ Thumbs.db
 *.bak
 *.backup
 *-backup/
+nul
 
 # 测试
 tests/
@@ -76,7 +101,10 @@ docker-compose*.yml
 Dockerfile*
 .dockerignore
 
-# 其他敏感文件
-*.pem
-*.key
-credentials.json
+# 工作区配置
+.workbuddy/
+
+# 后端本地数据 (运行时生成)
+backend/backend*.log
+backend/*.pid
+backend/app.db
