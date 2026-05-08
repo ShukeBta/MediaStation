@@ -1,0 +1,39 @@
+# ===========================================
+# MediaStation License Server Docker 部署
+# ===========================================
+# 独立的授权服务器部署配置
+
+version: '3.8'
+
+services:
+  license-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.license
+    container_name: mediastation-license
+    restart: unless-stopped
+    ports:
+      - "${LICENSE_PORT:-3001}:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      # 必填：从 .env 文件读取
+      - LICENSE_ADMIN_API_KEY=${LICENSE_ADMIN_API_KEY}
+      - LICENSE_HMAC_SECRET=${LICENSE_HMAC_SECRET}
+      # 可选：自定义数据库路径
+      # - LICENSE_DB_PATH=/app/data/license.db
+    volumes:
+      # 持久化授权数据库
+      - ./license_data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/v1/status/check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - license-net
+
+networks:
+  license-net:
+    driver: bridge

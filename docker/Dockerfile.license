@@ -1,0 +1,36 @@
+# ===========================================
+# MediaStation License Server Dockerfile
+# ===========================================
+
+FROM node:20-alpine
+
+LABEL maintainer="MediaStation"
+LABEL description="MediaStation License Authorization Server"
+LABEL org.opencontainers.image.source="https://github.com/ShukeBta/mediastation-license-server"
+
+WORKDIR /app
+
+# 安装依赖
+COPY license_server/package*.json ./
+RUN npm ci --production
+
+# 拷贝源码
+COPY license_server/ ./
+
+# 创建数据目录
+RUN mkdir -p /app/data && chown - node:node /app/data
+
+# 环境变量
+ENV NODE_ENV=production
+ENV PORT=3001
+
+# 暴露端口
+EXPOSE 3001
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3001/api/v1/status/check || exit 1
+
+# 启动
+USER node
+CMD ["node", "server.js"]

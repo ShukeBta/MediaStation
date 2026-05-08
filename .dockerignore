@@ -1,0 +1,82 @@
+# ===========================================
+# Docker 构建忽略文件
+# ===========================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# 环境变量 (不应该在镜像里)
+.env
+.env.*
+*.env
+
+# 日志
+*.log
+logs/
+*.log.*
+
+# 数据库
+*.db
+*.db-*
+data/*.db
+data/*.sqlite*
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+*.egg-info/
+.pytest_cache/
+.tox/
+
+# Node.js (在 frontend 和 license_server 里分别处理)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 临时文件
+*.tmp
+*.temp
+*.bak
+*.backup
+*-backup/
+
+# 测试
+tests/
+test/
+*.test.js
+*.spec.js
+
+# 文档
+*.md
+!README.md
+docs/
+
+# 备份
+backup_md/
+backup/
+
+# Docker 文件本身 (不要递归)
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# 其他敏感文件
+*.pem
+*.key
+credentials.json
