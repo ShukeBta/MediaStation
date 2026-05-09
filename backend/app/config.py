@@ -8,7 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     app_name: str = "MediaStation"
     app_port: int = 3001
     app_debug: bool = False
-    app_secret_key: str = "change-me-to-a-random-string"
+    app_secret_key: str = "AUTO_GENERATE"  # 将在 model_validator 中自动生成随机密钥
     data_dir: str = "./data"
 
     # ── 服务器地址（用于 external-url / DLNA 投屏等场景） ──
@@ -88,12 +88,34 @@ class Settings(BaseSettings):
     jwt_access_expire_minutes: int = 60
     jwt_refresh_expire_days: int = 30
 
+    # ── 下载客户端 SSL 校验 ──
+    verify_client_ssl: bool = True  # 改为 False 可允许自签证书（仅限内网）
+
     @field_validator("data_dir")
     @classmethod
     def ensure_data_dir(cls, v: str) -> str:
         p = Path(v)
         p.mkdir(parents=True, exist_ok=True)
         return str(p.resolve())
+
+    @model_validator(mode='after')
+    def validate_secret_key(self) -> 'Settings':
+        """检测弱密钥或未配置，自动生成随机密钥并警告"""
+        import secrets
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # 检测是否使用默认值或未配置
+        if self.app_secret_key in ("AUTO_GENERATE", "change-me-to-a-random-string", ""):
+            random_key = secrets.token_hex(32)
+            logger.warning(
+                f"⚠️  APP_SECRET_KEY not properly configured! "
+                f"Auto-generated random key: {random_key[:16]}... "
+                f"Users will be logged out on restart. "
+                f"Please set a fixed APP_SECRET_KEY in .env file."
+            )
+            self.app_secret_key = random_key
+        return self
 
     @property
     def db_url(self) -> str:

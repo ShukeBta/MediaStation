@@ -39,15 +39,16 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Database initialized")
 
-    # 创建默认管理员（密码优先从环境变量读取）
+    # 创建默认管理员（检查是否存在任何管理员，而非仅检查 "admin" 用户名）
     from app.database import async_session_factory
     from app.user.repository import UserRepository
     from app.user.auth import hash_password
 
     async with async_session_factory() as session:
         repo = UserRepository(session)
-        admin = await repo.get_by_username("admin")
-        if not admin:
+        # 检查是否存在任何 admin 角色的用户（防止用户改名后后门被反复重建）
+        has_admin = await repo.check_admin_exists()
+        if not has_admin:
             initial_password = os.getenv("ADMIN_INITIAL_PASSWORD", "admin123")
             await repo.create("admin", hash_password(initial_password), role="admin")
             if initial_password == "admin123":
@@ -92,6 +93,15 @@ async def lifespan(app: FastAPI):
 
     logger.info(f"MediaStation started on port {settings.app_port}")
     yield
+
+    # 关闭 - 清理转码任务（防止 FFmpeg 僵尸进程）
+    try:
+        from app.playback.service import get_transcoder
+        transcoder = get_transcoder()
+        await transcoder.shutdown_all()
+        logger.info("All transcode jobs killed")
+    except Exception as e:
+        logger.warning(f"Transcoder shutdown failed: {e}")
 
     # 关闭
     scheduler.shutdown()

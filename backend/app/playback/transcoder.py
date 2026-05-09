@@ -284,40 +284,49 @@ class Transcoder:
         file_path: str,
         quality: str = "720p",
     ) -> dict[str, Any]:
-        """获取或创建 HLS 转码任务"""
+        """获取或创建 HLS 转码任务（线程安全）"""
         job_key = f"{media_id}_{quality}"
 
         # 构建 API 可访问的 HLS URL（非本地文件路径）
         playlist_url = f"/api/playback/hls/{job_key}/playlist.m3u8"
 
-        # 检查缓存
+        # 检查缓存（快速路径，无锁）
         cache_playlist = self.cache_dir / job_key / "playlist.m3u8"
         if cache_playlist.exists():
             return {"mode": "hls", "playlist_url": playlist_url, "cached": True}
 
-        # 创建新转码任务
+        # 扩大锁作用域 - 防止 TOCTOU 竞态条件
         async with self._lock:
+            # 双重检查：获取锁后再次检查（防止等待锁期间其他任务已创建）
             if job_key in self._active_jobs:
                 job = self._active_jobs[job_key]
                 if job.status in ("running", "pending"):
                     return {"mode": "hls", "playlist_url": playlist_url, "status": job.status}
 
-        # 启动转码
-        output_dir = self.cache_dir / job_key
-        output_dir.mkdir(parents=True, exist_ok=True)
-        output_playlist = str(output_dir / "playlist.m3u8")
+            # 再次检查缓存（防止等待锁期间缓存已生成）
+            cache_playlist = self.cache_dir / job_key / "playlist.m3u8"
+            if cache_playlist.exists():
+                return {"mode": "hls", "playlist_url": playlist_url, "cached": True}
 
-        profile = TranscodeProfile.get_profile(quality)
-        hw_accel = self.detect_hw_accel()
+            # ── 在锁内创建任务，防止并发重复创建 ──
+            output_dir = self.cache_dir / job_key
+            output_dir.mkdir(parents=True, exist_ok=True)
 
-        job = TranscodeJob(
-            id=job_key,
-            media_id=media_id,
-            input_file=file_path,
-            profile=profile,
-            output_dir=output_dir,
-        )
+            profile = TranscodeProfile.get_profile(quality)
+            hw_accel = self.detect_hw_accel()
 
+            job = TranscodeJob(
+                id=job_key,
+                media_id=media_id,
+                input_file=file_path,
+                profile=profile,
+                output_dir=output_dir,
+            )
+
+            # 关键：先在锁内注册到活跃任务表（占位）
+            self._active_jobs[job_key] = job
+
+        # 锁释放后，再异步启动转码（避免在锁内执行耗时操作）
         # 预获取视频时长用于进度计算
         loop = asyncio.get_event_loop()
         try:
@@ -405,6 +414,14 @@ class Transcoder:
                 pass
             job.status = "cancelled"
 
+    async def shutdown_all(self):
+        """系统关闭时，杀掉所有 FFmpeg 子进程（防止僵尸进程）"""
+        logger.info(f"Shutting down {len(self._active_jobs)} transcode jobs...")
+        for job_id, job in list(self._active_jobs.items()):
+            if job.status in ("running", "pending"):
+                await self.cancel_job(job_id)
+        logger.info("All transcode jobs killed")
+
     def get_job_status(self, job_id: str) -> dict:
         job = self._active_jobs.get(job_id)
         if not job:
@@ -418,12 +435,18 @@ class Transcoder:
         }
 
     async def cleanup_cache(self, max_age_hours: int = 24):
-        """清理过期的转码缓存"""
+        """清理过期的转码缓存（跳过活跃任务）"""
         import time
         cutoff = time.time() - max_age_hours * 3600
         cleaned = 0
         for entry in self.cache_dir.iterdir():
             if entry.is_dir():
+                job_id = entry.name
+                # 检查是否是正在活跃的任务（防止删除正在使用的目录）
+                active_job = self._active_jobs.get(job_id)
+                if active_job and active_job.status in ("running", "pending"):
+                    continue  # 跳过正在转码的目录
+
                 try:
                     mtime = entry.stat().st_mtime
                     if mtime < cutoff:

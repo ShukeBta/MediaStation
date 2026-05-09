@@ -25,6 +25,11 @@ class UserRepository:
         result = await self.db.execute(select(User).order_by(User.id))
         return list(result.scalars().all())
 
+    async def check_admin_exists(self) -> bool:
+        """检查系统中是否存在任何 admin 角色的用户"""
+        result = await self.db.execute(select(User).where(User.role == "admin").limit(1))
+        return result.scalar_one_or_none() is not None
+
     async def create(self, username: str, password_hash: str, role: str = "user", tier: str = "free") -> User:
         user = User(username=username, password_hash=password_hash, role=role, tier=tier)
         self.db.add(user)

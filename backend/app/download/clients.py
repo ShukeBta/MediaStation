@@ -56,11 +56,13 @@ class DownloadClientAdapter(ABC):
     @property
     def client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
+            from app.config import get_settings
+            settings = get_settings()
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,
                 timeout=30.0,
                 follow_redirects=True,
-                verify=False,
+                verify=settings.verify_client_ssl,
             )
         return self._client
 
@@ -172,25 +174,27 @@ class QBittorrentAdapter(DownloadClientAdapter):
             (torrent_content, error_message)
         """
         try:
+            from app.config import get_settings
+            settings = get_settings()
             async with httpx.AsyncClient(
-                timeout=60.0, follow_redirects=True, verify=False
+                timeout=60.0, follow_redirects=True, verify=settings.verify_client_ssl
             ) as http_client:
-                # HEAD 请求检查内容类型
+                # HEAD 请求检查内容类型（不携带内部认证头，防止 Referer 泄露内网地址）
                 try:
-                    head_resp = await http_client.head(url, headers=self._auth_headers())
+                    head_resp = await http_client.head(url)
                     content_type = head_resp.headers.get("content-type", "")
                     final_url = str(head_resp.url) if head_resp.url else url
                 except Exception:
                     content_type = ""
                     final_url = url
 
-                # 如果是种子文件，直接下载
+                # 如果是种子文件，直接下载（不携带内部认证头）
                 if (".torrent" in final_url.lower() or
                     ".torrent" in url.lower() or
                     "application/x-bittorrent" in content_type or
                     "application/octet-stream" in content_type):
                     logger.info(f"检测到种子文件 URL，正在下载: {url[:60]}...")
-                    dl_resp = await http_client.get(url, headers=self._auth_headers())
+                    dl_resp = await http_client.get(url)
                     if dl_resp.status_code == 200:
                         content = dl_resp.content
                         # 验证是否为有效的种子文件（Bencode dict 以 d 开头）
@@ -200,8 +204,8 @@ class QBittorrentAdapter(DownloadClientAdapter):
                         else:
                             logger.warning(f"下载的内容不是有效的种子文件 (头部: {content[:20]})")
 
-                # 尝试 GET 请求下载
-                dl_resp = await http_client.get(url, headers=self._auth_headers())
+                # 尝试 GET 请求下载（不携带内部认证头）
+                dl_resp = await http_client.get(url)
                 content_type = dl_resp.headers.get("content-type", "")
                 final_url = str(dl_resp.url) if dl_resp.url else url
 
@@ -896,11 +900,13 @@ class Aria2Adapter(DownloadClientAdapter):
     @property
     def client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
+            from app.config import get_settings
+            settings = get_settings()
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,
                 timeout=60.0,   # Aria2 某些操作较慢
                 follow_redirects=True,
-                verify=False,
+                verify=settings.verify_client_ssl,
                 headers={"Content-Type": "application/json"},
             )
         return self._client

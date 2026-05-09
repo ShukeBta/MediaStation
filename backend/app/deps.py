@@ -59,6 +59,13 @@ async def get_current_user(
     user = await repo.get_by_id(int(user_id))
     if user is None:
         raise credentials_exception
+    # 检查用户是否处于激活状态（防止已封禁用户继续使用 token）
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="该账号已被封禁",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return UserOut.model_validate(user)
 
 
