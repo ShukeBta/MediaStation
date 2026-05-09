@@ -659,9 +659,27 @@ class QBittorrentAdapter(DownloadClientAdapter):
                 raise
 
         else:
-            # 本地种子文件
+            # 本地种子文件 - 严格路径校验防止任意文件读取
+            from pathlib import Path
+            from app.config import get_settings
+
+            file_path = Path(url).resolve()
+            settings = get_settings()
+            safe_upload_dir = Path(settings.data_dir) / "tmp_uploads"
+            safe_upload_dir.mkdir(parents=True, exist_ok=True)
+
+            # 验证路径在安全的上传目录内
             try:
-                with open(url, "rb") as f:
+                file_path.relative_to(safe_upload_dir.resolve())
+            except ValueError:
+                raise Exception(f"安全警告：非法的种子文件路径！路径必须在 {safe_upload_dir} 内")
+
+            if not file_path.exists() or not file_path.is_file():
+                raise Exception(f"种子文件不存在：{url}")
+
+            logger.info(f"读取本地种子文件：{file_path}")
+            try:
+                with open(file_path, "rb") as f:
                     torrent_content = f.read()
             except Exception as e:
                 raise Exception(f"读取种子文件失败: {e}")
@@ -688,12 +706,29 @@ class QBittorrentAdapter(DownloadClientAdapter):
         elif status == "completed":
             params["filter"] = "completed"
 
-        resp = await self.client.get(
-            f"{self.API}/torrents/info",
-            params=params,
-            headers=self._auth_headers(),
-        )
-        resp.raise_for_status()
+        try:
+            resp = await self.client.get(
+                f"{self.API}/torrents/info",
+                params=params,
+                headers=self._auth_headers(),
+            )
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            # 拦截 403 错误，标记为未登录并尝试重新登录
+            if e.response.status_code == 403:
+                logger.warning("qBittorrent 会话已过期，尝试重新登录...")
+                self._logged_in = False
+                await self._ensure_login()
+                # 重新发送请求
+                resp = await self.client.get(
+                    f"{self.API}/torrents/info",
+                    params=params,
+                    headers=self._auth_headers(),
+                )
+                resp.raise_for_status()
+            else:
+                raise
+
         torrents = resp.json()
 
         results = []

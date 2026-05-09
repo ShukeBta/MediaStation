@@ -11,8 +11,10 @@ from pathlib import Path
 
 import structlog
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
@@ -159,10 +161,18 @@ from fastapi.responses import JSONResponse
 
 @app.exception_handler(Exception)
 async def global_error_handler(request: Request, exc: Exception):
+    # 放行正常的 HTTP 状态码异常
+    if isinstance(exc, StarletteHTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    
+    # 放行 FastAPI 的请求参数校验异常
+    if isinstance(exc, RequestValidationError):
+        return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
     logger.error(f"Unhandled error: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500,
-        content={"code": "INTERNAL_ERROR", "message": "Internal server error", "status": 500},
+        content={"code": "INTERNAL_ERROR", "message": "Internal server error"},
     )
 
 

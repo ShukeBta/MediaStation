@@ -1119,7 +1119,18 @@ class MediaScanner:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
+            try:
+                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
+            except asyncio.TimeoutError:
+                # 超时时必须杀死子进程，防止僵尸进程
+                logger.error(f"ffprobe timeout for {file_path}, killing process...")
+                try:
+                    proc.kill()
+                    await proc.wait()  # 必须 wait 以回收僵尸进程
+                except ProcessLookupError:
+                    pass
+                return None
+            
             if proc.returncode != 0:
                 return None
 
