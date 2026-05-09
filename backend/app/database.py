@@ -140,10 +140,6 @@ async def close_db():
     if engine is None:
         return
     await engine.dispose()
+    engine = None
+    async_session_factory = None
     logger.info("Database connection closed")
-
-
-engine = _build_engine()
-async_session_factory = async_sessionmaker(
-    engine, class_=AsyncSession, expire_on_commit=False
-)

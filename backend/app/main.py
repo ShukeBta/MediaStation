@@ -5,6 +5,7 @@ FastAPI 主入口，生命周期管理，路由注册。
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -38,7 +39,7 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Database initialized")
 
-    # 创建默认管理员
+    # 创建默认管理员（密码优先从环境变量读取）
     from app.database import async_session_factory
     from app.user.repository import UserRepository
     from app.user.auth import hash_password
@@ -47,8 +48,11 @@ async def lifespan(app: FastAPI):
         repo = UserRepository(session)
         admin = await repo.get_by_username("admin")
         if not admin:
-            await repo.create("admin", hash_password("admin123"), role="admin")
-            logger.info("Default admin user created: admin / admin123")
+            initial_password = os.getenv("ADMIN_INITIAL_PASSWORD", "admin123")
+            await repo.create("admin", hash_password(initial_password), role="admin")
+            if initial_password == "admin123":
+                logger.warning("⚠️  Default admin password 'admin123' in use — please change it immediately after first login!")
+            logger.info(f"Default admin user created: admin / {initial_password}")
         await session.commit()
 
     # 启动调度器
@@ -115,9 +119,17 @@ app = FastAPI(
 # ── 中间件 ──
 settings = get_settings()
 
+# CORS 配置：allow_origins=["*"] 不能与 allow_credentials=True 同时使用
+# 使用环境变量 CORS_ORIGINS（逗号分隔），未设置时默认允许前端开发服务器
+_cors_env = os.getenv("CORS_ORIGINS", "")
+_cors_origins = (
+    [o.strip() for o in _cors_env.split(",") if o.strip()]
+    if _cors_env
+    else ["http://localhost:5173", "http://127.0.0.1:5173"]
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 生产环境应限制
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -196,7 +208,14 @@ if static_dir.exists():
         if full_path.startswith("api/") or full_path.startswith("assets/"):
             from fastapi.responses import Response
             return Response(status_code=404)
-        file = static_dir / full_path
-        if file.exists() and file.is_file():
+        # Path Traversal 防护：resolve 后严格校验路径在 static_dir 内
+        file = (static_dir / full_path).resolve()
+        static_resolved = static_dir.resolve()
+        try:
+            is_safe = file.is_relative_to(static_resolved)
+        except AttributeError:
+            # Python < 3.9 兼容
+            is_safe = str(file).startswith(str(static_resolved))
+        if file.exists() and file.is_file() and is_safe:
             return FileResponse(str(file))
         return FileResponse(str(static_dir / "index.html"))

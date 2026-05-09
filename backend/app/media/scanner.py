@@ -117,14 +117,14 @@ SEASON_ALIAS_MAP = {
     "final": None,  # 需要从目录结构推断
 }
 
-# 分辨率模式
-RESOLUTION_PATTERNS = [
-    (r"2160[pP]|4[Kk]", "4K"),
-    (r"1080[pi]", "1080p"),
-    (r"1080[iI]", "1080i"),
-    (r"720[pP]", "720p"),
-    (r"480[pP]", "480p"),
-    (r"SD", "SD"),
+# 分辨率模式（预编译正则，提升扫描性能）
+_RES_PATTERNS = [
+    (re.compile(r"2160[pP]|4[Kk]", re.IGNORECASE), "4K"),
+    (re.compile(r"1080[pi]", re.IGNORECASE), "1080p"),
+    (re.compile(r"1080[iI]", re.IGNORECASE), "1080i"),
+    (re.compile(r"720[pP]", re.IGNORECASE), "720p"),
+    (re.compile(r"480[pP]", re.IGNORECASE), "480p"),
+    (re.compile(r"\bSD\b", re.IGNORECASE), "SD"),
 ]
 
 
@@ -386,8 +386,8 @@ def find_show_nfo(video_path: Path) -> Path | None:
 
 
 def guess_resolution(filename: str) -> str | None:
-    for pattern, res in RESOLUTION_PATTERNS:
-        if re.search(pattern, filename):
+    for pattern, res in _RES_PATTERNS:
+        if pattern.search(filename):
             return res
     return None
 
