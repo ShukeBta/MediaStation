@@ -126,9 +126,20 @@ class Settings(BaseSettings):
 
     @property
     def sync_db_url(self) -> str:
-        """同步数据库 URL，供 Alembic 使用"""
+        """同步数据库 URL，供 Alembic 使用（支持多种数据库）"""
         if self.database_url:
-            return self.database_url.replace("+asyncpg", "+psycopg2")
+            url = self.database_url
+            # 映射多种主流异步驱动到同步驱动 (Issue #24 修复)
+            import re
+            replacements = {
+                r"\+asyncpg": "+psycopg2",
+                r"\+aiomysql": "+pymysql",
+                r"\+aiosqlite": "",
+            }
+            for pattern, repl in replacements.items():
+                url = re.sub(pattern, repl, url)
+            return url
+        
         db_path = Path(self.data_dir) / "mediastation.db"
         return f"sqlite:///{db_path}"
 
