@@ -309,6 +309,15 @@ class Transcoder:
                 return {"mode": "hls", "playlist_url": playlist_url, "cached": True}
 
             # ── 在锁内创建任务，防止并发重复创建 ──
+            # 检查并发任务数限制 (Issue #21 修复)
+            running_count = sum(1 for j in self._active_jobs.values() if j.status in ("running", "pending"))
+            if running_count >= self.max_jobs:
+                from fastapi import HTTPException
+                raise HTTPException(
+                    status_code=429,
+                    detail="服务器转码资源已满，请稍后再试或切换原画播放。"
+                )
+
             output_dir = self.cache_dir / job_key
             output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -439,6 +448,19 @@ class Transcoder:
         import time
         cutoff = time.time() - max_age_hours * 3600
         cleaned = 0
+        
+        # 增加：清理内存中已结束的旧任务 (Issue #22 修复)
+        current_time = asyncio.get_event_loop().time()
+        stale_keys = []
+        for k, v in self._active_jobs.items():
+            if v.status in ("completed", "failed", "cancelled"):
+                # 给 1 小时的缓冲时间供前端查询最终状态
+                if current_time - v.created_at > 3600:
+                    stale_keys.append(k)
+        for k in stale_keys:
+            self._active_jobs.pop(k, None)
+        
+        # 原有逻辑继续
         for entry in self.cache_dir.iterdir():
             if entry.is_dir():
                 job_id = entry.name
