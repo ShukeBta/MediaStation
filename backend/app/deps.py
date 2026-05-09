@@ -16,9 +16,10 @@ from app.config import Settings, get_settings
 from app.database import async_session_factory
 from app.exceptions import UnauthorizedError
 from app.user.auth import ALGORITHM
-from app.user.models import User, UserPermission
+from app.user.models import User, UserPermission, SystemConfig
 from app.user.repository import UserRepository
 from app.user.schemas import UserOut, UserPermissionOut
+from sqlalchemy import select
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -92,11 +93,19 @@ async def get_user_permissions(
     current_user: Annotated[UserOut, Depends(get_current_active_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> UserPermissionOut:
-    """获取当前用户的功能权限（自动为缺失的用户创建默认权限）"""
-    from sqlalchemy import select
+    """获取当前用户的功能权限
+    
+    使用数据库锁（with_for_update）避免竞态条件。
+    如果权限记录不存在，自动创建默认权限。
+    """
+    from sqlalchemy.exc import IntegrityError
 
+    # 使用 with_for_update 锁避免竞态条件
+    # 如果记录不存在，锁会持续到事务结束
     result = await db.execute(
-        select(UserPermission).where(UserPermission.user_id == current_user.id)
+        select(UserPermission)
+        .where(UserPermission.user_id == current_user.id)
+        .with_for_update()
     )
     perms = result.scalar_one_or_none()
 
@@ -109,8 +118,16 @@ async def get_user_permissions(
             for col in UserPermission.__table__.columns:
                 if col.name not in ("id", "user_id", "created_at", "updated_at"):
                     setattr(perms, col.name, True)
-        db.add(perms)
-        await db.flush()
+        try:
+            db.add(perms)
+            await db.flush()
+        except IntegrityError:
+            # 竞态条件：另一个请求已经创建了记录，重新查询
+            await db.rollback()
+            result = await db.execute(
+                select(UserPermission).where(UserPermission.user_id == current_user.id)
+            )
+            perms = result.scalar_one()
 
     return UserPermissionOut.model_validate(perms)
 
@@ -138,8 +155,6 @@ def require_permission(permission_field: str):
         if current_user.tier == "plus":
             return perms
         # 系统级 Plus 授权（检查 SystemConfig）
-        from sqlalchemy import select
-        from app.user.models import SystemConfig
         result = await db.execute(
             select(SystemConfig).where(SystemConfig.key == "user_tier")
         )

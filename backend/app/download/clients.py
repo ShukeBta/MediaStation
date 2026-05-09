@@ -282,14 +282,17 @@ class QBittorrentAdapter(DownloadClientAdapter):
 
         return None, "未知错误"
 
-    async def _get_latest_torrent_hash(self, max_wait_seconds: int = 5) -> str | None:
+    async def _get_latest_torrent_hash(self, max_wait_seconds: int = 5, category: str | None = None) -> str | None:
         """获取最近添加的任务的 hash
 
         通过获取 torrent info 列表，按添加时间倒序返回第一个的 hash。
         这用于在添加任务后获取真实的 hash，以便后续匹配和状态同步。
 
+        如果提供了 category，则只返回该 category 的 torrent（用于避免竞态条件）。
+
         Args:
             max_wait_seconds: 最大等待秒数，用于等待任务出现
+            category: 可选，按 category 过滤（推荐使用 UUID 来避免竞态）
 
         Returns:
             任务的 info hash，如果失败返回 None
@@ -299,8 +302,12 @@ class QBittorrentAdapter(DownloadClientAdapter):
 
         for attempt in range(10):  # 最多尝试 10 次
             try:
+                params = {}
+                if category:
+                    params["category"] = category
                 resp = await self.client.get(
                     f"{self.API}/torrents/info",
+                    params=params,
                     headers=self._auth_headers(),
                 )
                 if resp.status_code == 200:
@@ -473,11 +480,18 @@ class QBittorrentAdapter(DownloadClientAdapter):
           - tracker URL (如 M-Team)
         """
         await self._ensure_login()
+
+        # 生成 UUID 用于避免竞态条件（确保获取到正确的 hash）
+        import uuid
+        temp_category = str(uuid.uuid4())
+
         data: dict[str, str] = {}
         if save_path:
             data["savepath"] = save_path
-        if category:
-            data["category"] = category
+        
+        # 使用临时 category 来识别新添加的种子（避免竞态）
+        data["category"] = temp_category
+        user_category = category  # 保存用户原始的 category
 
         # 处理特殊格式
         if url.startswith("TORRENT:"):
@@ -508,9 +522,23 @@ class QBittorrentAdapter(DownloadClientAdapter):
                 # qBittorrent 成功时返回 "Ok." 或空字符串
                 if resp_text.lower() in ("ok.", "ok", ""):
                     logger.info("种子添加成功 (Base64)，正在获取任务 hash")
-                    # 获取新添加任务的真实 hash
-                    torrent_hash = await self._get_latest_torrent_hash()
+                    # 使用临时 category 获取新添加任务的真实 hash（避免竞态）
+                    torrent_hash = await self._get_latest_torrent_hash(category=temp_category)
                     if torrent_hash:
+                        # 如果用户指定了 category，更新它
+                        if user_category:
+                            await self.client.post(
+                                f"{self.API}/torrents/setCategory",
+                                data={"hashes": torrent_hash, "category": user_category},
+                                headers=self._auth_headers(),
+                            )
+                        else:
+                            # 清除临时 category
+                            await self.client.post(
+                                f"{self.API}/torrents/setCategory",
+                                data={"hashes": torrent_hash, "category": ""},
+                                headers=self._auth_headers(),
+                            )
                         return torrent_hash
                     return "torrent-base64"
                 elif resp_text.lower() == "fails.":
@@ -565,9 +593,29 @@ class QBittorrentAdapter(DownloadClientAdapter):
                     headers=self._auth_headers(),
                 )
                 resp_text = resp.text.strip()
-                if resp_text.lower() == "ok." or resp_text == "":
+                if resp_text.lower() in ("ok.", "", "tracker-magnet"):
+                    # 尝试获取 hash
+                    torrent_hash = await self._get_latest_torrent_hash(category=temp_category)
+                    if torrent_hash:
+                        # 如果用户指定了 category，更新它
+                        if user_category:
+                            await self.client.post(
+                                f"{self.API}/torrents/setCategory",
+                                data={"hashes": torrent_hash, "category": user_category},
+                                headers=self._auth_headers(),
+                            )
+                        return torrent_hash
                     return "tracker-magnet"
                 elif "fail" not in resp_text.lower():
+                    torrent_hash = await self._get_latest_torrent_hash(category=temp_category)
+                    if torrent_hash:
+                        if user_category:
+                            await self.client.post(
+                                f"{self.API}/torrents/setCategory",
+                                data={"hashes": torrent_hash, "category": user_category},
+                                headers=self._auth_headers(),
+                            )
+                        return torrent_hash
                     return "tracker-magnet"
 
             # 磁力链构造失败，尝试直接下载种子
@@ -583,16 +631,42 @@ class QBittorrentAdapter(DownloadClientAdapter):
                 resp_text2 = resp.text.strip()
                 if resp_text2.lower() == "ok." or resp_text2 == "":
                     logger.info("种子添加成功 (tracker 下载)，正在获取任务 hash")
-                    torrent_hash = await self._get_latest_torrent_hash()
+                    torrent_hash = await self._get_latest_torrent_hash(category=temp_category)
                     if torrent_hash:
+                        # 如果用户指定了 category，更新它
+                        if user_category:
+                            await self.client.post(
+                                f"{self.API}/torrents/setCategory",
+                                data={"hashes": torrent_hash, "category": user_category},
+                                headers=self._auth_headers(),
+                            )
+                        else:
+                            # 清除临时 category
+                            await self.client.post(
+                                f"{self.API}/torrents/setCategory",
+                                data={"hashes": torrent_hash, "category": ""},
+                                headers=self._auth_headers(),
+                            )
                         return torrent_hash
                     return "tracker-download"
                 elif "fail" in resp_text2.lower():
                     raise Exception(f"添加种子失败: {resp_text2}")
                 else:
                     # 其他响应也视为成功
-                    torrent_hash = await self._get_latest_torrent_hash()
+                    torrent_hash = await self._get_latest_torrent_hash(category=temp_category)
                     if torrent_hash:
+                        if user_category:
+                            await self.client.post(
+                                f"{self.API}/torrents/setCategory",
+                                data={"hashes": torrent_hash, "category": user_category},
+                                headers=self._auth_headers(),
+                            )
+                        else:
+                            await self.client.post(
+                                f"{self.API}/torrents/setCategory",
+                                data={"hashes": torrent_hash, "category": ""},
+                                headers=self._auth_headers(),
+                            )
                         return torrent_hash
                     return "tracker-download"
             raise Exception(f"无法添加: {error or 'tracker URL 不被支持'}")
@@ -616,8 +690,22 @@ class QBittorrentAdapter(DownloadClientAdapter):
                     logger.info(f"qBittorrent HTTP 下载添加响应: {resp_text[:100]!r}")
                     if resp_text.lower() in ("ok.", "ok", ""):
                         logger.info("种子添加成功 (HTTP 下载)，正在获取任务 hash")
-                        torrent_hash = await self._get_latest_torrent_hash()
+                        torrent_hash = await self._get_latest_torrent_hash(category=temp_category)
                         if torrent_hash:
+                            # 如果用户指定了 category，更新它
+                            if user_category:
+                                await self.client.post(
+                                    f"{self.API}/torrents/setCategory",
+                                    data={"hashes": torrent_hash, "category": user_category},
+                                    headers=self._auth_headers(),
+                                )
+                            else:
+                                # 清除临时 category
+                                await self.client.post(
+                                    f"{self.API}/torrents/setCategory",
+                                    data={"hashes": torrent_hash, "category": ""},
+                                    headers=self._auth_headers(),
+                                )
                             return torrent_hash
                         return "http-torrent"
                     else:
@@ -642,8 +730,22 @@ class QBittorrentAdapter(DownloadClientAdapter):
 
                 if resp_text.lower() in ("ok.", "ok", ""):
                     logger.info("URL 添加成功")
-                    torrent_hash = await self._get_latest_torrent_hash()
+                    torrent_hash = await self._get_latest_torrent_hash(category=temp_category)
                     if torrent_hash:
+                        # 如果用户指定了 category，更新它
+                        if user_category:
+                            await self.client.post(
+                                f"{self.API}/torrents/setCategory",
+                                data={"hashes": torrent_hash, "category": user_category},
+                                headers=self._auth_headers(),
+                            )
+                        else:
+                            # 清除临时 category
+                            await self.client.post(
+                                f"{self.API}/torrents/setCategory",
+                                data={"hashes": torrent_hash, "category": ""},
+                                headers=self._auth_headers(),
+                            )
                         return torrent_hash
                     return "http-url"
 

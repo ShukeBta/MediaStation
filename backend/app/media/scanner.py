@@ -827,12 +827,13 @@ class MediaScanner:
     async def _scan_movies(self, root: Path) -> list[dict]:
         """扫描电影文件，支持NFO元数据"""
         results = []
-        video_files = self._find_video_files(root)
+        video_files = await asyncio.to_thread(self._find_video_files, root)
         for vf in video_files:
+            stat = await asyncio.to_thread(vf.stat)
             info = {
                 "file_path": str(vf),
                 "file_name": vf.name,
-                "file_size": vf.stat().st_size if vf.exists() else 0,
+                "file_size": stat.st_size,
                 "media_type": "movie",
                 "container": vf.suffix.lstrip(".").lower(),
                 "resolution": guess_resolution(vf.name),
@@ -888,10 +889,10 @@ class MediaScanner:
         """扫描剧集文件，支持 Season X 文件夹结构"""
         results = []
         # 递归查找所有视频文件
-        video_files = self._find_video_files(root)
+        video_files = await asyncio.to_thread(self._find_video_files, root)
 
         # 收集所有Season文件夹信息
-        season_folders = self._find_season_folders(root)
+        season_folders = await asyncio.to_thread(self._find_season_folders, root)
         logger.info(f"Found {len(season_folders)} season folders in {root}")
 
         # 按目录分组，同时处理嵌套结构
@@ -1001,10 +1002,14 @@ class MediaScanner:
                 if season_num is None and folder_season_num is not None:
                     season_num = folder_season_num
 
+                # 使用 asyncio.to_thread 包装阻塞 I/O 调用
+                stat = await asyncio.to_thread(vf.stat)
+                _ = await asyncio.to_thread(vf.exists)  # 检查文件是否存在
+
                 info = {
                     "file_path": str(vf),
                     "file_name": vf.name,
-                    "file_size": vf.stat().st_size if vf.exists() else 0,
+                    "file_size": stat.st_size,
                     "media_type": media_type,
                     "container": vf.suffix.lstrip(".").lower(),
                     "resolution": guess_resolution(vf.name),
@@ -1013,7 +1018,7 @@ class MediaScanner:
                     "parsed_name": show_name,
                     "season_number": season_num,
                     "episode_number": episode_num,
-                    "subtitles": self._find_subtitles(vf),
+                    "subtitles": await asyncio.to_thread(self._find_subtitles, vf),
                 }
 
                 probe_data = await self._ffprobe(vf)
