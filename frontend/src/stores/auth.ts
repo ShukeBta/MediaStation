@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi } from '@/api/auth'
-import { licenseApi } from '@/api/license'
 
 // 用户权限接口 — 与后端 UserPermissionOut 对齐
 export interface UserPermissions {
@@ -35,14 +34,12 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<any>(null)
   const permissions = ref<UserPermissions | null>(null)
   const permissionsLoaded = ref(false)
-  const licenseStatus = ref<any>(null)
 
   const isAuthenticated = computed(() => !!token.value)
   const isAdmin = computed(() => user.value?.role === 'admin')
   const isPlus = computed(() => {
-    if (user.value?.tier === 'plus') return true
-    if (licenseStatus.value?.is_plus) return true
-    return false
+    // 直接使用 user.tier 字段判断 Plus 状态
+    return user.value?.tier === 'plus'
   })
 
   async function login(username: string, password: string) {
@@ -51,9 +48,8 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = data.user
     localStorage.setItem('access_token', data.access_token)
     localStorage.setItem('refresh_token', data.refresh_token)
-    // 登录成功后获取权限和授权状态
+    // 登录成功后获取权限
     await fetchPermissions()
-    await fetchLicenseStatus()
     return data
   }
 
@@ -80,15 +76,6 @@ export const useAuthStore = defineStore('auth', () => {
       // 权限获取失败不阻塞流程
       console.warn('Failed to fetch user permissions')
       permissionsLoaded.value = true
-    }
-  }
-
-  async function fetchLicenseStatus() {
-    try {
-      const { data } = await licenseApi.getStatus()
-      licenseStatus.value = data
-    } catch (e) {
-      console.warn('Failed to fetch license status', e)
     }
   }
 
@@ -124,14 +111,12 @@ export const useAuthStore = defineStore('auth', () => {
     user,
     permissions,
     permissionsLoaded,
-    licenseStatus,
     isAuthenticated,
     isAdmin,
     isPlus,
     login,
     fetchMe,
     fetchPermissions,
-    fetchLicenseStatus,
     logout,
     hasPermission,
     isAdminOnly,

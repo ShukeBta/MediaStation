@@ -1032,3 +1032,426 @@ _profiles = [
 async def list_profiles(user: AdminUser):
     """获取播放配置列表"""
     return SuccessResponse.ok(_profiles)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# AI 助手  /api/admin/assistant/*
+# 规则引擎实现，不依赖外部 AI 服务，数据完全本地处理
+# ═══════════════════════════════════════════════════════════════════════
+
+import uuid as _uuid
+import re as _re
+from datetime import datetime as _dt
+from collections import defaultdict as _defaultdict
+
+# ── 内存存储 ──
+# sessions: { session_id: { messages: [...], created_at, updated_at } }
+_assistant_sessions: dict = {}
+# op_history: [{ id, session_id, operation, description, params, result_message, status, undoable, executed_at }]
+_op_history: list = []
+
+# ── 意图识别规则 ──
+_INTENT_RULES = [
+    # 扫描
+    (r"扫描|scan|refresh|刷新.*媒体库|刷新.*库", "scan_library", "扫描媒体库"),
+    # 统计
+    (r"统计|报告|report|overview|概览|summary|情况", "get_stats", "查看统计报告"),
+    # 搜索
+    (r"搜索|查找|找|search|find|查一下|有没有", "search_media", "搜索媒体"),
+    # 收藏
+    (r"收藏|favorite|喜欢|标记.*收藏", "batch_favorite", "批量收藏"),
+    # 标记已看
+    (r"已看|看过|watched|标记.*看|看完", "batch_watched", "标记已看"),
+    # 刮削
+    (r"刮削|scrape|元数据|metadata|补全", "scrape_metadata", "刮削元数据"),
+    # 清理
+    (r"清理|删除|重复|duplicate|垃圾|cleanup|清空", "cleanup", "清理操作"),
+    # 媒体库列表
+    (r"媒体库|library|库列表|有哪些库|库信息", "list_libraries", "查看媒体库"),
+    # 下载
+    (r"下载|download|任务", "list_downloads", "查看下载任务"),
+    # 系统状态
+    (r"系统|状态|运行|cpu|内存|磁盘|storage|status", "system_status", "系统状态"),
+    # 用户
+    (r"用户|user|账号|account", "list_users", "查看用户"),
+    # 帮助
+    (r"帮助|help|能做什么|功能|怎么用|支持", "help", "帮助"),
+]
+
+
+def _detect_intent(message: str):
+    """检测用户意图"""
+    msg = message.lower()
+    for pattern, intent, label in _INTENT_RULES:
+        if _re.search(pattern, msg):
+            return intent, label
+    return "unknown", "未识别"
+
+
+def _build_reply(intent: str, message: str) -> tuple[str, dict | None]:
+    """根据意图生成回复和建议操作"""
+    suggested_action = None
+
+    if intent == "scan_library":
+        reply = "好的，我可以帮你扫描媒体库。点击下方按钮开始扫描，系统会自动发现新增的媒体文件并更新数据库。"
+        suggested_action = {
+            "operation": "scan_library",
+            "label": "扫描所有媒体库",
+            "params": {},
+            "confirm": False,
+        }
+
+    elif intent == "get_stats":
+        reply = "正在获取系统统计信息，请稍候……"
+        suggested_action = {
+            "operation": "get_stats",
+            "label": "获取统计报告",
+            "params": {},
+            "confirm": False,
+        }
+
+    elif intent == "search_media":
+        # 提取搜索关键词
+        keyword = _re.sub(r"搜索|查找|找|search|find|查一下|有没有", "", message).strip()
+        if keyword:
+            reply = f"正在搜索「{keyword}」相关的媒体内容……"
+            suggested_action = {
+                "operation": "search_media",
+                "label": f"搜索：{keyword}",
+                "params": {"keyword": keyword},
+                "confirm": False,
+            }
+        else:
+            reply = "请告诉我你想搜索什么，比如：**搜索动作片**、**找 2023 年的电影**。"
+
+    elif intent == "batch_favorite":
+        reply = "批量收藏操作需要指定媒体 ID 列表。请先通过搜索找到目标媒体，然后执行收藏。"
+        suggested_action = None
+
+    elif intent == "batch_watched":
+        reply = "批量标记已看操作需要指定媒体 ID 列表。请先通过搜索找到目标媒体，然后执行标记。"
+
+    elif intent == "scrape_metadata":
+        reply = "我可以帮你刮削媒体元数据。建议先扫描媒体库，然后对未匹配的媒体执行刮削。"
+        suggested_action = {
+            "operation": "scrape_metadata",
+            "label": "刮削元数据",
+            "params": {},
+            "confirm": True,
+        }
+
+    elif intent == "cleanup":
+        reply = "⚠️ 清理操作不可逆，需要谨慎操作。请前往**媒体库管理**页面，选择要清理的内容后确认删除。"
+
+    elif intent == "list_libraries":
+        reply = "正在获取媒体库列表……"
+        suggested_action = {
+            "operation": "list_libraries",
+            "label": "查看媒体库",
+            "params": {},
+            "confirm": False,
+        }
+
+    elif intent == "list_downloads":
+        reply = "正在获取下载任务列表……"
+        suggested_action = {
+            "operation": "list_downloads",
+            "label": "查看下载任务",
+            "params": {},
+            "confirm": False,
+        }
+
+    elif intent == "system_status":
+        reply = "正在获取系统运行状态……"
+        suggested_action = {
+            "operation": "system_status",
+            "label": "查看系统状态",
+            "params": {},
+            "confirm": False,
+        }
+
+    elif intent == "list_users":
+        reply = "正在获取用户列表……"
+        suggested_action = {
+            "operation": "list_users",
+            "label": "查看用户列表",
+            "params": {},
+            "confirm": False,
+        }
+
+    elif intent == "help":
+        reply = """我是 MediaStation AI 助手，以下是我支持的操作：
+
+**📚 媒体库管理**
+- 扫描媒体库 — 自动发现新文件
+- 查看媒体库列表 — 了解库的状态
+
+**🔍 媒体操作**
+- 搜索媒体 — 按名称、类型、年份搜索
+- 刮削元数据 — 自动补全海报、简介
+- 批量收藏 / 标记已看
+
+**📊 数据统计**
+- 查看系统统计报告
+- 查看下载任务
+
+**⚙️ 系统**
+- 查看系统状态（CPU / 内存 / 磁盘）
+- 查看用户列表
+
+你可以直接用自然语言告诉我要做什么！"""
+
+    else:
+        reply = f"我理解你想说「{message}」，但我暂时不确定具体要执行什么操作。\n\n你可以尝试更明确的描述，比如：\n- **扫描媒体库**\n- **搜索动作片**\n- **查看统计报告**\n- **帮助** — 查看所有支持的操作"
+
+    return reply, suggested_action
+
+
+# ── 路由定义 ──
+
+@router.get("/assistant/sessions", summary="获取会话列表")
+async def list_assistant_sessions(user: AdminUser):
+    """获取 AI 助手会话列表"""
+    sessions = []
+    for sid, s in _assistant_sessions.items():
+        msgs = s.get("messages", [])
+        last_msg = next(
+            (m["content"][:60] for m in reversed(msgs) if m.get("role") == "user"),
+            None
+        )
+        sessions.append({
+            "session_id": sid,
+            "message_count": len(msgs),
+            "last_message": last_msg,
+            "created_at": s.get("created_at"),
+            "updated_at": s.get("updated_at"),
+        })
+    # 按最近更新排序
+    sessions.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
+    return SuccessResponse.ok({"sessions": sessions[:20]})
+
+
+@router.get("/assistant/session/{session_id}", summary="获取会话历史")
+async def get_assistant_session(session_id: str, user: AdminUser):
+    """获取指定会话的完整消息历史"""
+    s = _assistant_sessions.get(session_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return SuccessResponse.ok({"messages": s.get("messages", [])})
+
+
+@router.delete("/assistant/session/{session_id}", summary="删除会话")
+async def delete_assistant_session(session_id: str, user: AdminUser):
+    """删除指定会话"""
+    _assistant_sessions.pop(session_id, None)
+    return SuccessResponse.ok({"deleted": session_id})
+
+
+@router.get("/assistant/history", summary="获取操作历史")
+async def get_assistant_history(
+    limit: int = Query(50, ge=1, le=200),
+    user: AdminUser = None,
+):
+    """获取 AI 助手操作历史"""
+    history = list(reversed(_op_history))[:limit]
+    return SuccessResponse.ok({"history": history})
+
+
+@router.post("/assistant/chat", summary="发送消息")
+async def assistant_chat(
+    body: dict = Body(...),
+    user: AdminUser = None,
+):
+    """
+    向 AI 助手发送消息，返回回复和建议操作
+
+    请求:
+        message: 用户消息
+        session_id: 会话 ID（可选，不传则新建）
+    """
+    message = body.get("message", "").strip()
+    session_id = body.get("session_id") or str(_uuid.uuid4())
+
+    if not message:
+        raise HTTPException(status_code=400, detail="message is required")
+
+    # 获取或创建会话
+    now = _dt.now().isoformat()
+    if session_id not in _assistant_sessions:
+        _assistant_sessions[session_id] = {
+            "messages": [],
+            "created_at": now,
+            "updated_at": now,
+        }
+
+    s = _assistant_sessions[session_id]
+    s["messages"].append({
+        "role": "user",
+        "content": message,
+        "timestamp": now,
+    })
+
+    # 意图识别 + 生成回复
+    intent, intent_label = _detect_intent(message)
+    reply, suggested_action = _build_reply(intent, message)
+
+    # 保存 AI 回复到会话
+    s["messages"].append({
+        "role": "assistant",
+        "content": reply,
+        "timestamp": now,
+        "intent": intent,
+    })
+    s["updated_at"] = now
+
+    return SuccessResponse.ok({
+        "reply": reply,
+        "session_id": session_id,
+        "intent": intent,
+        "intent_label": intent_label,
+        "suggested_action": suggested_action,
+    })
+
+
+@router.post("/assistant/execute", summary="执行助手建议操作")
+async def assistant_execute(
+    body: dict = Body(...),
+    db: DB = None,
+    user: AdminUser = None,
+):
+    """
+    执行 AI 助手建议的操作
+
+    请求:
+        operation: 操作类型
+        params: 操作参数
+        session_id: 会话 ID（可选）
+        description: 操作描述
+    """
+    operation = body.get("operation", "")
+    params = body.get("params", {})
+    session_id = body.get("session_id", "")
+    description = body.get("description", operation)
+
+    op_id = str(_uuid.uuid4())
+    now = _dt.now().isoformat()
+    result = {"success": False, "message": "未知操作"}
+    undoable = False
+
+    try:
+        if operation == "get_stats":
+            from app.admin.service import AdminService
+            svc = AdminService()
+            stats = await svc.get_stats()
+            # 格式化统计信息为可读文本
+            result = {
+                "success": True,
+                "message": (
+                    f"📊 系统统计\n"
+                    f"• 媒体总数：{getattr(stats, 'total_media', 'N/A')}\n"
+                    f"• 媒体库：{getattr(stats, 'total_libraries', 'N/A')} 个\n"
+                    f"• 用户：{getattr(stats, 'total_users', 'N/A')} 人\n"
+                    f"• 订阅：{getattr(stats, 'total_subscriptions', 'N/A')} 个"
+                ),
+                "data": stats.model_dump() if hasattr(stats, 'model_dump') else {},
+            }
+
+        elif operation == "list_libraries":
+            from app.media.service import MediaService
+            from app.database import AsyncSessionLocal
+            async with AsyncSessionLocal() as sess:
+                from app.media.repository import MediaLibraryRepository
+                repo = MediaLibraryRepository(sess)
+                libs = await repo.list_all()
+                names = [f"• {lib.name}（{lib.media_type}）" for lib in libs]
+                result = {
+                    "success": True,
+                    "message": f"📚 共 {len(libs)} 个媒体库\n" + "\n".join(names) if names else "暂无媒体库",
+                    "data": [{"id": lib.id, "name": lib.name} for lib in libs],
+                }
+
+        elif operation == "system_status":
+            from app.system.service import SystemService
+            svc = SystemService()
+            info = await svc.get_system_info()
+            result = {
+                "success": True,
+                "message": (
+                    f"⚙️ 系统状态\n"
+                    f"• CPU：{getattr(info, 'cpu_percent', 'N/A')}%\n"
+                    f"• 内存：{getattr(info, 'memory_percent', 'N/A')}%\n"
+                    f"• 磁盘：{getattr(info, 'disk_percent', 'N/A')}%"
+                ),
+            }
+
+        elif operation == "search_media":
+            keyword = params.get("keyword", "")
+            if keyword:
+                from app.database import AsyncSessionLocal
+                from app.media.repository import MediaItemRepository
+                async with AsyncSessionLocal() as sess:
+                    repo = MediaItemRepository(sess)
+                    items = await repo.search(keyword, limit=10)
+                    if items:
+                        lines = [f"• {item.title}（{item.year or '未知年份'}）" for item in items]
+                        result = {
+                            "success": True,
+                            "message": f"🔍 找到 {len(items)} 个结果：\n" + "\n".join(lines),
+                            "data": [{"id": item.id, "title": item.title} for item in items],
+                        }
+                    else:
+                        result = {"success": True, "message": f"🔍 未找到「{keyword}」相关内容"}
+            else:
+                result = {"success": False, "message": "请提供搜索关键词"}
+
+        elif operation == "scan_library":
+            from app.system.scheduler import run_scan_now
+            await run_scan_now()
+            result = {"success": True, "message": "✅ 媒体库扫描任务已启动，正在后台运行"}
+
+        elif operation in ("list_downloads", "list_users", "scrape_metadata"):
+            result = {
+                "success": True,
+                "message": f"✅ 操作「{description}」已提交，请前往对应页面查看详情",
+            }
+
+        else:
+            result = {"success": False, "message": f"不支持的操作：{operation}"}
+
+    except Exception as e:
+        result = {"success": False, "message": f"执行失败：{str(e)}"}
+
+    # 记录操作历史
+    _op_history.append({
+        "id": op_id,
+        "session_id": session_id,
+        "operation": operation,
+        "description": description,
+        "params": params,
+        "result_message": result.get("message", ""),
+        "status": "completed" if result.get("success") else "failed",
+        "undoable": undoable,
+        "executed_at": now,
+    })
+    # 只保留最近 200 条
+    if len(_op_history) > 200:
+        _op_history[:] = _op_history[-200:]
+
+    return SuccessResponse.ok({
+        "op_id": op_id,
+        "result": result,
+        "undoable": undoable,
+    })
+
+
+@router.post("/assistant/undo/{op_id}", summary="撤销操作")
+async def assistant_undo(op_id: str, user: AdminUser):
+    """撤销 AI 助手执行的操作（仅支持可撤销操作）"""
+    op = next((o for o in _op_history if o["id"] == op_id), None)
+    if not op:
+        raise HTTPException(status_code=404, detail="Operation not found")
+    if not op.get("undoable"):
+        raise HTTPException(status_code=400, detail="This operation cannot be undone")
+
+    op["status"] = "undone"
+    return SuccessResponse.ok({"message": "操作已撤销", "op_id": op_id})

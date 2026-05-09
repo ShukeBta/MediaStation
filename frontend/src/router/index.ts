@@ -174,12 +174,9 @@ router.beforeEach(async (to, from, next) => {
   if (auth.isAuthenticated && !auth.user) {
     await auth.fetchMe()
   }
-  // 首次加载时获取权限和授权状态
+  // 首次加载时获取权限
   if (auth.isAuthenticated && !auth.permissionsLoaded) {
     await auth.fetchPermissions()
-  }
-  if (auth.isAuthenticated && !auth.licenseStatus) {
-    await auth.fetchLicenseStatus()
   }
 
   // 未认证 → 登录页

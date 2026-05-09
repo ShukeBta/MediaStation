@@ -143,8 +143,8 @@
           </button>
         </div>
         <!-- 图表 -->
-        <div v-if="trend.data" class="h-48">
-          <v-chart :option="trendChartOption" autoresize />
+        <div v-if="trend.data" class="min-h-[12rem]">
+          <v-chart :option="trendChartOption" autoresize class="w-full h-48" />
         </div>
         <div v-else-if="trend.loading" class="h-48 flex items-center justify-center">
           <div class="animate-pulse w-full h-full bg-[var(--bg-hover)] rounded" />

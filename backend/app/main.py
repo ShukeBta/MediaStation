@@ -161,6 +161,7 @@ from app.stats.router import router as stats_router
 from app.playlist.router import router as playlist_router
 from app.strm.router import router as strm_router
 from app.dlna import router as dlna_router
+from app.license.router import router as license_router
 
 API_PREFIX = "/api"
 
@@ -180,6 +181,7 @@ app.include_router(stats_router, prefix=API_PREFIX)
 app.include_router(playlist_router, prefix=API_PREFIX)
 app.include_router(strm_router, prefix=API_PREFIX)
 app.include_router(dlna_router, prefix=API_PREFIX)
+app.include_router(license_router, prefix=API_PREFIX)
 
 
 # ── 静态文件（前端构建产物） ──

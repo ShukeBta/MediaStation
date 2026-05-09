@@ -55,3 +55,13 @@ class UserRepository:
         if user:
             await self.db.delete(user)
             await self.db.flush()
+
+    async def update_tier(self, user_id: int, tier: str) -> User | None:
+        """Update user tier (free/plus)"""
+        user = await self.get_by_id(user_id)
+        if not user:
+            return None
+        user.tier = tier
+        await self.db.flush()
+        await self.db.refresh(user)
+        return user
