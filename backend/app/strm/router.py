@@ -13,6 +13,7 @@ API 端点：
 """
 from __future__ import annotations
 
+import json
 from typing import Annotated, Any, Dict
 
 from fastapi import APIRouter, HTTPException, Path
@@ -26,39 +27,72 @@ from app.strm.schemas import (
     StrmConfigResponse,
     MediaStrmUpdate,
 )
+from app.system.models import SettingsKV
 
 router = APIRouter(prefix="/admin/strm", tags=["strm"])
 
-# ── 内存配置存储（生产环境建议持久化到数据库或配置文件）──
-_strm_config: Dict[str, Any] = {
-    "enabled": False,
-    "allowed_protocols": ["http", "https"],
-    "max_file_size": 1048576,  # 1MB
-}
+
+# ── STRM 配置数据库存储辅助函数 ──
+
+async def _get_strm_config(db: DB) -> Dict[str, Any]:
+    """从数据库获取 STRM 配置（不存在则返回默认配置）"""
+    result = await db.execute(
+        select(SettingsKV).where(SettingsKV.key == "strm.config")
+    )
+    row = result.scalar_one_or_none()
+    if row and row.value:
+        return json.loads(row.value)
+    # 返回默认配置
+    return {
+        "enabled": False,
+        "allowed_protocols": ["http", "https"],
+        "max_file_size": 1048576,
+    }
+
+
+async def _save_strm_config(db: DB, config: Dict[str, Any]) -> None:
+    """保存 STRM 配置到数据库"""
+    result = await db.execute(
+        select(SettingsKV).where(SettingsKV.key == "strm.config")
+    )
+    row = result.scalar_one_or_none()
+    if row:
+        row.value = json.dumps(config)
+    else:
+        row = SettingsKV(key="strm.config", value=json.dumps(config))
+        db.add(row)
+    await db.flush()
 
 
 @router.get("/config", summary="获取 STRM 配置")
-async def get_strm_config(user: AdminUser):
+async def get_strm_config(user: AdminUser, db: DB):
     """
     获取 STRM 文件支持配置。
     enabled: 是否启用 STRM 支持
     allowed_protocols: 允许的 URL 协议列表
     max_file_size: 最大 STRM 文件大小（字节）
     """
-    return SuccessResponse.ok(StrmConfigResponse(**_strm_config).model_dump())
+    config = await _get_strm_config(db)
+    return SuccessResponse.ok(StrmConfigResponse(**config).model_dump())
 
 
 @router.put("/config", summary="更新 STRM 配置")
-async def update_strm_config(data: StrmConfigUpdate, user: AdminUser):
+async def update_strm_config(data: StrmConfigUpdate, user: AdminUser, db: DB):
     """
     更新 STRM 文件支持配置。
     可以部分更新（只传需要修改的字段）。
     """
+    # 获取当前配置
+    config = await _get_strm_config(db)
+    # 更新传入的字段
     update_data = data.model_dump(exclude_none=True)
-    _strm_config.update(update_data)
+    config.update(update_data)
+    # 保存到数据库
+    await _save_strm_config(db, config)
+    
     return SuccessResponse.ok({
         "message": "STRM 配置已更新",
-        **StrmConfigResponse(**_strm_config).model_dump(),
+        **StrmConfigResponse(**config).model_dump(),
     })
 
 
@@ -107,13 +141,16 @@ async def set_media_strm(
     if not item:
         raise HTTPException(404, "媒体条目不存在")
 
+    # 从数据库获取 STRM 配置
+    config = await _get_strm_config(db)
+    
     # 检查 STRM 是否启用
-    if not _strm_config["enabled"]:
+    if not config["enabled"]:
         raise HTTPException(400, "STRM 支持未启用，请先在配置中启用")
 
     # 验证 URL 协议
     url = data.strm_url.strip()
-    allowed = _strm_config["allowed_protocols"]
+    allowed = config["allowed_protocols"]
     if not any(url.lower().startswith(p + "://") or url.lower().startswith(p + ":") for p in allowed):
         raise HTTPException(
             400,

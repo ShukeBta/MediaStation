@@ -101,9 +101,11 @@ class EmbyProgressRequest(BaseModel):
 
 
 def _emby_server_id() -> str:
-    """生成稳定的服务器 ID（基于配置）"""
+    """生成稳定的服务器 ID（基于配置，使用稳定哈希）"""
     settings = get_settings()
-    return f"mediastation-{hash(settings.app_secret_key) % 100000:05d}"
+    # 使用 MD5 生成稳定的哈希，避免 Python hash() 随机化导致多进程下 ID 变化
+    stable_hash = hashlib.md5(settings.app_secret_key.encode()).hexdigest()[:12]
+    return f"mediastation-{stable_hash}"
 
 
 def _emby_item_id(item_id: int) -> str:
@@ -130,10 +132,13 @@ async def _get_all_items(repo: MediaRepository) -> list:
 # ── 公开端点（无需认证）──
 
 @router.get("/System/Info")
-async def emby_system_info():
+async def emby_system_info(request: Request):
     """系统信息"""
     from fastapi.responses import JSONResponse
     settings = get_settings()
+    
+    # 动态获取客户端请求时使用的 Base URL
+    local_address = str(request.base_url).rstrip("/")
 
     return {
         "ServerName": "MediaStation",
@@ -154,8 +159,8 @@ async def emby_system_info():
         "ItemsByNamePath": "",
         "CachePath": "",
         "LogPath": "",
-        "LocalAddress": f"http://localhost:{settings.app_port}",
-        "WanAddress": "",
+        "LocalAddress": local_address,
+        "WanAddress": local_address,
         "HasUpdateAvailable": False,
         "SupportsAutoRunAtStartup": False,
         "HardwareAccelerationRequires Premiere": False,
@@ -167,16 +172,17 @@ async def emby_system_info():
 
 
 @router.get("/System/Public")
-async def emby_system_public():
+async def emby_system_public(request: Request):
     """公开系统信息（客户端首次连接调用）"""
     settings = get_settings()
+    local_address = str(request.base_url).rstrip("/")
     return {
         "ServerName": "MediaStation (Emby Compatible)",
         "Version": "0.1.0",
         "Id": _emby_server_id(),
         "OperatingSystem": "Linux",
-        "LocalAddress": f"http://localhost:{settings.app_port}",
-        "WanAddress": "",
+        "LocalAddress": local_address,
+        "WanAddress": local_address,
         "StartupWizardCompleted": True,
     }
 
@@ -205,7 +211,11 @@ async def emby_authenticate(
         raise HTTPException(401, "User account is disabled")
 
     # 验证密码
-    if request.Pw and not verify_password(request.Pw, user.password_hash):
+    # 修复：取消隐式布尔判断，防止空密码绕过
+    if not request.Pw:
+        raise HTTPException(401, "密码不能为空")
+    
+    if not verify_password(request.Pw, user.password_hash):
         raise HTTPException(401, "Invalid username or password")
 
     # 生成 Emby 格式响应
