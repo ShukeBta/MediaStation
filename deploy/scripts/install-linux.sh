@@ -2,7 +2,7 @@
 # ============================================================
 #  MediaStation — Linux 一键安装脚本
 #  支持: Ubuntu / Debian / CentOS / Fedora / Arch
-#  用法: curl -fsSL https://raw.githubusercontent.com/your-repo/mediastation/main/deploy/scripts/install.sh | bash
+#  用法: curl -fsSL https://raw.githubusercontent.com/shukebta/mediastation/main/deploy/scripts/install.sh | bash
 # ============================================================
 
 set -e
@@ -97,7 +97,10 @@ install_dependencies() {
         log_info "安装 Docker..."
         curl -fsSL https://get.docker.com | sh
         systemctl --user enable --now docker 2>/dev/null || systemctl enable --now docker
-        usermod -aG docker $USER
+        # 使用 SUDO_USER 获取真实的提权前用户
+        REAL_USER=${SUDO_USER:-$USER}
+        usermod -aG docker $REAL_USER
+        log_info "已添加用户 $REAL_USER 到 docker 组，请重新登录生效"
     fi
 
     # 安装 Docker Compose
@@ -136,12 +139,12 @@ download_configs() {
 
     # 下载 docker-compose.yml
     if [ ! -f docker-compose.yml ]; then
-        curl -fsSL "https://raw.githubusercontent.com/your-repo/mediastation/main/docker-compose.example.yml" -o docker-compose.yml
+        curl -fsSL "https://raw.githubusercontent.com/shukebta/mediastation/main/docker-compose.example.yml" -o docker-compose.yml
     fi
 
     # 下载 .env
     if [ ! -f .env ]; then
-        curl -fsSL "https://raw.githubusercontent.com/your-repo/mediastation/main/.env.example" -o .env.example
+        curl -fsSL "https://raw.githubusercontent.com/shukebta/mediastation/main/.env.example" -o .env.example
         cp .env.example .env
     fi
 

@@ -21,19 +21,32 @@ class EventBus:
         self._handlers: dict[str, list[Callable]] = defaultdict(list)
 
     def emit(self, event_type: str, data: dict[str, Any]):
-        """发出事件"""
+        """发出事件（线程安全）"""
         message = {"type": event_type, "data": data}
-        for queue in self._subscribers.get(event_type, []):
+        json_msg = json.dumps(message, ensure_ascii=False, default=str)
+        
+        # 获取当前的事件循环
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # 没有运行的事件循环，记录警告并返回
+            logger.warning("No running event loop, cannot emit event")
+            return
+        
+        def _safe_put(q):
+            """线程安全地向队列放入消息"""
             try:
-                queue.put_nowait(json.dumps(message, ensure_ascii=False, default=str))
+                q.put_nowait(json_msg)
             except asyncio.QueueFull:
-                pass
+                logger.warning("Event queue full, dropping message")
+        
+        # 使用 call_soon_threadsafe 保证即使外部模块从其他线程调用，也能安全地推入队列
+        for queue in self._subscribers.get(event_type, []):
+            loop.call_soon_threadsafe(_safe_put, queue)
+        
         # 广播到通配符订阅者
         for queue in self._subscribers.get("*", []):
-            try:
-                queue.put_nowait(json.dumps(message, ensure_ascii=False, default=str))
-            except asyncio.QueueFull:
-                pass
+            loop.call_soon_threadsafe(_safe_put, queue)
 
     def subscribe(
         self, event_types: list[str] | None = None, maxsize: int = 100

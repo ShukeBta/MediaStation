@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import async_session_factory
+from app.playlist.models import Playlist, PlaylistItem
 from app.playlist.schemas import (
     PlaylistCreate,
     PlaylistUpdate,
@@ -316,7 +317,3 @@ class PlaylistService:
             
             await db.commit()
             return True
-
-
-# 导入模型
-from app.playlist.models import Playlist, PlaylistItem

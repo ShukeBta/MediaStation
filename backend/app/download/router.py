@@ -101,23 +101,41 @@ async def sync_tasks(user: AdminUser, db: DB):
 
 
 @router.post("/download/start-auto-sync")
-async def start_auto_sync(user: CurrentUser, db: DB):
+async def start_auto_sync(user: CurrentUser):
     """启动后台自动同步（每 5 秒同步一次下载进度）"""
     import asyncio
+    from app.database import async_session_factory
     from app.system.events import get_event_bus
 
+    # 防止重复启动：检查是否已有自动同步任务在运行
+    global _auto_sync_task
+    if _auto_sync_task is not None and not _auto_sync_task.done():
+        return {"ok": True, "message": "自动同步已在运行中"}
+
     async def _auto_sync_loop():
-        service = DownloadService(db)
         while True:
             try:
-                await service.sync_task_status()
-            except Exception:
-                pass
+                # 每次循环使用独立的数据库会话
+                async with async_session_factory() as db:
+                    service = DownloadService(db)
+                    await service.sync_task_status()
+            except asyncio.CancelledError:
+                # 任务被取消，正常退出
+                break
+            except Exception as e:
+                # 记录错误但继续运行
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f'Auto sync error: {e}')
             await asyncio.sleep(5)
 
     # 在后台启动自动同步任务
-    asyncio.create_task(_auto_sync_loop())
+    _auto_sync_task = asyncio.create_task(_auto_sync_loop())
     return {"ok": True, "message": "已启动自动进度同步（每5秒）"}
+
+
+# 全局变量用于跟踪自动同步任务
+_auto_sync_task = None
 
 
 # ── Aria2 扩展端点 ──

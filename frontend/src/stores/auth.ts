@@ -91,12 +91,10 @@ export const useAuthStore = defineStore('auth', () => {
 
   /**
    * 检查当前用户是否拥有指定权限。
-   * PLUS 用户和管理员默认拥有所有权限。
+   * 一切以服务器下发的 permissions 字典为准，不再使用前端硬编码判断。
    */
   function hasPermission(perm: keyof UserPermissions): boolean {
-    if (isAdmin.value) return true
-    if (isPlus.value) return true
-    return permissions.value?.[perm] ?? false
+    return permissions.value?.[perm] === true
   }
 
   /**
