@@ -219,12 +219,18 @@ class DownloadService:
         }
 
     async def sync_task_status(self):
-        """同步所有客户端的任务状态，并联动更新订阅状态"""
+        """同步所有客户端的任务状态，并联动更新订阅状态（批量查询优化版）"""
         from app.system.events import get_event_bus
+        from sqlalchemy import or_
 
         clients = await self.list_clients()
         all_updates = []
         newly_completed_sub_ids: set[int] = set()  # 本次同步中新完成的订阅 ID
+
+        # ── 第一阶段：收集所有 torrent 的 hash 和 name ──
+        client_adapters = []
+        all_hashes: list[str] = []
+        all_names: list[tuple[int, str]] = []  # (client_id, name)
 
         for client_out in clients:
             client_db = await self._get_client(client_out.id)
@@ -234,72 +240,91 @@ class DownloadService:
                 torrents = await adapter.get_torrents()
 
                 for torrent in torrents:
-                    # 首先用 info_hash 匹配
-                    # 注意：可能有重复记录，使用 .first() 而不是 .scalar_one_or_none()
-                    task = None
                     if torrent.hash and len(torrent.hash) in (32, 40):
-                        result = await self.db.execute(
-                            select(DownloadTask).where(
-                                DownloadTask.info_hash == torrent.hash
-                            ).limit(1)
-                        )
-                        task = result.scalar_one_or_none()
+                        all_hashes.append(torrent.hash)
+                    if torrent.name:
+                        all_names.append((client_db.id, torrent.name))
 
-                    # 若 hash 匹配不到，尝试用种子名称 + 客户端 ID 回退匹配
-                    # 注意：可能有多条记录匹配名称，使用 .first() 而不是 .scalar_one_or_none()
-                    if not task and torrent.name:
-                        result = await self.db.execute(
-                            select(DownloadTask).where(
-                                DownloadTask.client_id == client_db.id,
-                                DownloadTask.torrent_name == torrent.name,
-                            ).limit(1)
-                        )
-                        task = result.scalar_one_or_none()
-
-                    if task:
-                        old_status = task.status
-                        task.status = torrent.status
-                        task.progress = torrent.progress
-                        task.total_size = torrent.size
-                        task.downloaded = torrent.downloaded
-                        task.speed = torrent.speed
-                        task.seeders = torrent.seeders
-                        task.eta = torrent.eta
-                        task.torrent_name = torrent.name
-                        task.save_path = torrent.save_path
-                        # 若之前没有 hash 或 hash 是 URL，用真实 hash 更新
-                        if torrent.hash and len(torrent.hash) in (32, 40):
-                            task.info_hash = torrent.hash
-
-                        # 收集刚完成的订阅 ID（状态从非 completed 变为 completed）
-                        if (torrent.status == "completed"
-                                and old_status != "completed"
-                                and task.subscription_id):
-                            newly_completed_sub_ids.add(task.subscription_id)
-
-                        await self.db.flush()
-
-                        # 收集进度更新用于 SSE 广播
-                        all_updates.append({
-                            "id": task.id,
-                            "torrent_name": torrent.name,
-                            "status": torrent.status,
-                            "progress": torrent.progress,
-                            "total_size": torrent.size,
-                            "downloaded": torrent.downloaded,
-                            "speed": torrent.speed,
-                            "upload_speed": getattr(torrent, 'upload_speed', 0),
-                            "seeders": torrent.seeders,
-                            "eta": torrent.eta,
-                        })
-                    else:
-                        # 跳过：只同步通过 MediaStation 创建的下载任务
-                        # 用户在 qBittorrent 中手动添加的任务不自动同步
-                        logger.debug(f"[同步] 跳过未管理的种子: {torrent.name} (hash={torrent.hash})")
+                client_adapters.append((client_db, adapter, torrents))
             except Exception as e:
                 logger.error(f"Sync client {client_db.name} failed: {e}")
 
-        # ── 联动更新订阅状态：下载完成 → 订阅标记为 completed ──
+        # ── 第二阶段：批量查询 DB ──
+        # 按 hash 匹配
+        task_by_hash: dict[str, DownloadTask] = {}
+        if all_hashes:
+            result = await self.db.execute(
+                select(DownloadTask).where(
+                    DownloadTask.info_hash.in_(all_hashes)
+                )
+            )
+            for task in result.scalars().all():
+                if task.info_hash:
+                    task_by_hash[task.info_hash] = task
+
+        # 按 (client_id, torrent_name) 匹配
+        task_by_name: dict[tuple[int, str], DownloadTask] = {}
+        if all_names:
+            conditions = [
+                (DownloadTask.client_id == cid) & (DownloadTask.torrent_name == name)
+                for cid, name in all_names
+            ]
+            result = await self.db.execute(
+                select(DownloadTask).where(or_(*conditions))
+            )
+            for task in result.scalars().all():
+                if task.torrent_name and task.client_id:
+                    task_by_name[(task.client_id, task.torrent_name)] = task
+
+        # ── 第三阶段：内存匹配 & 更新 ──
+        for client_db, adapter, torrents in client_adapters:
+            for torrent in torrents:
+                # 优先按 hash 匹配
+                task = None
+                if torrent.hash and len(torrent.hash) in (32, 40):
+                    task = task_by_hash.get(torrent.hash)
+
+                # 回退：按名称 + 客户端 ID 匹配
+                if not task and torrent.name:
+                    task = task_by_name.get((client_db.id, torrent.name))
+
+                if task:
+                    old_status = task.status
+                    task.status = torrent.status
+                    task.progress = torrent.progress
+                    task.total_size = torrent.size
+                    task.downloaded = torrent.downloaded
+                    task.speed = torrent.speed
+                    task.seeders = torrent.seeders
+                    task.eta = torrent.eta
+                    task.torrent_name = torrent.name
+                    task.save_path = torrent.save_path
+                    if torrent.hash and len(torrent.hash) in (32, 40):
+                        task.info_hash = torrent.hash
+
+                    if (torrent.status == "completed"
+                            and old_status != "completed"
+                            and task.subscription_id):
+                        newly_completed_sub_ids.add(task.subscription_id)
+
+                    await self.db.flush()
+
+                    all_updates.append({
+                        "id": task.id,
+                        "torrent_name": torrent.name,
+                        "status": torrent.status,
+                        "progress": torrent.progress,
+                        "total_size": torrent.size,
+                        "downloaded": torrent.downloaded,
+                        "speed": torrent.speed,
+                        "upload_speed": getattr(torrent, 'upload_speed', 0),
+                        "seeders": torrent.seeders,
+                        "eta": torrent.eta,
+                    })
+                else:
+                    logger.debug(f"[同步] 跳过未管理的种子: {torrent.name} (hash={torrent.hash})")
+
+        # ── 联动更新订阅状态 ──
         if newly_completed_sub_ids:
             await self._mark_subscriptions_completed(newly_completed_sub_ids)
 
@@ -312,6 +337,7 @@ class DownloadService:
                 })
             except Exception:
                 pass
+
 
     async def _mark_subscriptions_completed(self, sub_ids: set[int]):
         """将指定订阅标记为 completed 状态"""
@@ -352,34 +378,31 @@ class DownloadService:
 
         for task in completed_tasks:
             # 检查是否已整理过（通过 message 字段标记）
+            # 使用 begin_nested() 实现单步异常隔离，不破坏整体会话
             try:
-                # 确保 session 状态正常
-                await self.db.rollback()
+                async with self.db.begin_nested():
+                    msg = task.message or ""
+                    if "[organized]" in msg:
+                        stats["skipped"] += 1
+                        continue
 
-                msg = task.message or ""
-                if "[organized]" in msg:
-                    stats["skipped"] += 1
-                    continue
-
-                organize_result = await self._organize_task(task)
-                if organize_result.organized > 0:
-                    stats["organized"] += 1
-                    task.message = f"[organized] 已整理 {organize_result.organized} 个文件"
-                    # 触发媒体库扫描（对相关媒体库）
-                    await self._trigger_library_scan(task)
-                elif organize_result.skipped > 0:
-                    stats["skipped"] += 1
-                    task.message = f"[organized] 跳过（文件已存在或无需整理）"
-                else:
-                    stats["errors"] += 1
-                    task.message = f"[organized] 整理失败: {'; '.join(organize_result.errors)}"
-                await self.db.flush()
+                    organize_result = await self._organize_task(task)
+                    if organize_result.organized > 0:
+                        stats["organized"] += 1
+                        task.message = f"[organized] 已整理 {organize_result.organized} 个文件"
+                        # 触发媒体库扫描（对相关媒体库）
+                        await self._trigger_library_scan(task)
+                    elif organize_result.skipped > 0:
+                        stats["skipped"] += 1
+                        task.message = f"[organized] 跳过（文件已存在或无需整理）"
+                    else:
+                        stats["errors"] += 1
+                        task.message = f"[organized] 整理失败: {'; '.join(organize_result.errors)}"
             except Exception as e:
-                await self.db.rollback()
                 logger.error(f"Organize task {task.id} failed: {e}")
                 stats["errors"] += 1
                 try:
-                    # 尝试记录错误信息（可能有新 session）
+                    # 在嵌套事务外记录错误信息
                     task.message = f"[organized] 整理异常: {str(e)[:200]}"
                     await self.db.flush()
                 except:

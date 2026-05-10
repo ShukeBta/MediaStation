@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import difflib
 import json
 import logging
 import os
@@ -741,13 +742,9 @@ def check_scrape_title_safety(original_name: str, scraped_title: str) -> tuple[b
     orig_alnum = re.sub(r"[^\w]", "", original_name.lower())
     scraped_alnum = re.sub(r"[^\w]", "", scraped_title.lower())
     if orig_alnum and scraped_alnum:
-        common_prefix = 0
-        for a, b in zip(orig_alnum[:20], scraped_alnum[:20]):
-            if a == b:
-                common_prefix += 1
-            else:
-                break
-        similarity = common_prefix / max(len(orig_alnum), len(scraped_alnum))
+        # 使用 SequenceMatcher 计算相似度（容忍前缀/位移）
+        matcher = difflib.SequenceMatcher(None, orig_alnum, scraped_alnum)
+        similarity = matcher.ratio()
         if similarity < 0.3:
             return False, f"英文标题相似度过低 ({similarity:.2f}): 原始='{original_name}', 刮削='{scraped_title}'"
 
@@ -757,8 +754,65 @@ def check_scrape_title_safety(original_name: str, scraped_title: str) -> tuple[b
 class MediaScanner:
     """媒体文件扫描器"""
 
-    def __init__(self, ffprobe_path: str = "ffprobe"):
+    def __init__(self, ffprobe_path: str = "ffprobe", max_concurrency: int = 4):
         self.ffprobe_path = ffprobe_path
+        self._semaphore = asyncio.Semaphore(max_concurrency)
+
+    async def _process_movie_file(self, vf: Path) -> dict | None:
+        """处理单个电影文件（带信号量，限制并发）"""
+        async with self._semaphore:
+            try:
+                stat = await asyncio.to_thread(vf.stat)
+                info = {
+                    "file_path": str(vf),
+                    "file_name": vf.name,
+                    "file_size": stat.st_size,
+                    "media_type": "movie",
+                    "container": vf.suffix.lstrip(".").lower(),
+                    "resolution": guess_resolution(vf.name),
+                    "video_codec": guess_video_codec(vf.name),
+                    "audio_codec": guess_audio_codec(vf.name),
+                }
+
+                # 尝试用 ffprobe 获取精确信息
+                probe_data = await self._ffprobe(vf)
+                if probe_data:
+                    info["duration"] = probe_data.get("duration", 0)
+                    info["video_codec"] = probe_data.get("video_codec") or info["video_codec"]
+                    info["audio_codec"] = probe_data.get("audio_codec") or info["audio_codec"]
+                    info["resolution"] = probe_data.get("resolution") or info["resolution"]
+                else:
+                    info["duration"] = 0
+
+                # 解析名称
+                info["parsed_name"] = parse_media_name(vf.name)
+
+                # 优先使用NFO元数据
+                nfo_path = find_nfo_file(vf)
+                if nfo_path:
+                    nfo_data = parse_nfo_file(nfo_path)
+                    if nfo_data:
+                        info["nfo_path"] = str(nfo_path)
+                        if nfo_data.get("tmdb_id"):
+                            info["tmdb_id"] = nfo_data["tmdb_id"]
+                        if nfo_data.get("imdb_id"):
+                            info["imdb_id"] = nfo_data["imdb_id"]
+                        if nfo_data.get("title"):
+                            info["nfo_title"] = nfo_data["title"]
+
+                # 查找关联字幕
+                info["subtitles"] = self._find_subtitles(vf)
+
+                # 查找海报
+                all_posters = find_all_posters(vf)
+                if all_posters:
+                    info["local_poster"] = str(all_posters[0])
+                    info["all_posters"] = [str(p) for p in all_posters]
+
+                return info
+            except Exception as e:
+                logger.warning(f"处理文件失败 {vf}: {e}")
+                return None
 
     async def scan_directory(
         self, library_path: str, media_type: str
@@ -781,61 +835,15 @@ class MediaScanner:
         return results
 
     async def _scan_movies(self, root: Path) -> list[dict]:
-        """扫描电影文件，支持NFO元数据"""
-        results = []
+        """扫描电影文件，支持NFO元数据（并发处理）"""
         video_files = await asyncio.to_thread(self._find_video_files, root)
-        for vf in video_files:
-            stat = await asyncio.to_thread(vf.stat)
-            info = {
-                "file_path": str(vf),
-                "file_name": vf.name,
-                "file_size": stat.st_size,
-                "media_type": "movie",
-                "container": vf.suffix.lstrip(".").lower(),
-                "resolution": guess_resolution(vf.name),
-                "video_codec": guess_video_codec(vf.name),
-                "audio_codec": guess_audio_codec(vf.name),
-            }
-
-            # 尝试用 ffprobe 获取精确信息
-            probe_data = await self._ffprobe(vf)
-            if probe_data:
-                info["duration"] = probe_data.get("duration", 0)
-                info["video_codec"] = probe_data.get("video_codec") or info["video_codec"]
-                info["audio_codec"] = probe_data.get("audio_codec") or info["audio_codec"]
-                info["resolution"] = probe_data.get("resolution") or info["resolution"]
-            else:
-                info["duration"] = 0
-
-            # 解析名称
-            info["parsed_name"] = parse_media_name(vf.name)
-
-            # 优先使用NFO元数据
-            nfo_path = find_nfo_file(vf)
-            if nfo_path:
-                nfo_data = parse_nfo_file(nfo_path)
-                if nfo_data:
-                    info["nfo_path"] = str(nfo_path)
-                    if nfo_data.get("tmdb_id"):
-                        info["tmdb_id"] = nfo_data["tmdb_id"]
-                    if nfo_data.get("imdb_id"):
-                        info["imdb_id"] = nfo_data["imdb_id"]
-                    if nfo_data.get("title"):
-                        info["nfo_title"] = nfo_data["title"]
-                    logger.debug(f"Found NFO for {vf.name}: tmdb_id={info.get('tmdb_id')}")
-
-            # 查找关联字幕
-            info["subtitles"] = self._find_subtitles(vf)
-
-            # Issue #32 修复：只调用一次 find_all_posters，取第一个作为主海报
-            # 避免 find_poster + find_all_posters 两次重复遍历同一目录的磁盘 I/O
-            all_posters = find_all_posters(vf)
-            if all_posters:
-                info["local_poster"] = str(all_posters[0])
-                logger.debug(f"Found local poster for {vf.name}: {all_posters[0]}")
-                info["all_posters"] = [str(p) for p in all_posters]
-
-            results.append(info)
+        
+        # 并发处理所有文件（信号量限制并发数）
+        tasks = [self._process_movie_file(vf) for vf in video_files]
+        results_list = await asyncio.gather(*tasks)
+        
+        # 过滤掉处理失败的文件
+        results = [r for r in results_list if r is not None]
         return results
 
     async def _scan_tv_shows(self, root: Path, media_type: str) -> list[dict]:
