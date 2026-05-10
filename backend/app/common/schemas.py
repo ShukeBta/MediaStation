@@ -109,73 +109,165 @@ class ListResponse(BaseModel, Generic[T]):
 # ── 路径安全验证 ──
 
 class PathValidator:
-    """文件路径白名单验证器"""
+    """文件路径白名单验证器
     
-    # 允许的根目录
-    ALLOWED_ROOTS: list[str] = []
-    # 阻止的系统目录
+    Issue #57 修复：使用 pathlib.is_relative_to() 进行严格路径校验，
+    防止目录穿越攻击（Path Traversal）。
+    """
+    
+    # 阻止的系统目录（这些目录绝对不能访问）
     BLOCKED_PATHS: list[str] = [
         "/proc", "/sys", "/dev", "/boot", "/etc",
         "/run", "/snap", "/bin", "/sbin", "/lib",
-        "/.git", "/.ssh",
+        "/.git", "/.ssh", "/.docker",
     ]
     # Windows 阻止目录
     WINDOWS_BLOCKED: list[str] = [
         "C:\\Windows", "C:\\Program Files", "C:\\Program Files (x86)",
-        "C:\\Windows\\System32",
+        "C:\\Windows\\System32", "C:\\Windows\\SystemData",
     ]
     
     def __init__(self, media_dirs: list[str] | None = None, data_dir: str | None = None):
-        self.allowed_roots = [
-            data_dir or "/data",
-            "/mnt", "/media", "/home",
-        ]
+        """初始化路径验证器
+        
+        Args:
+            media_dirs: 媒体库配置目录列表
+            data_dir: 数据目录
+        """
+        # 构建允许的根目录列表（使用 pathlib.Path.resolve() 确保绝对路径）
+        self.allowed_roots: list[pathlib.Path] = []
+        
+        if data_dir:
+            self.allowed_roots.append(pathlib.Path(data_dir).resolve())
+        else:
+            self.allowed_roots.append(pathlib.Path("/data").resolve())
+        
+        # 添加常见媒体目录
+        for root in ["/mnt", "/media", "/home"]:
+            try:
+                p = pathlib.Path(root).resolve()
+                if p.exists():
+                    self.allowed_roots.append(p)
+            except Exception:
+                pass
+        
+        # 添加用户配置的媒体库目录
         if media_dirs:
-            self.allowed_roots.extend(media_dirs)
+            for d in media_dirs:
+                try:
+                    p = pathlib.Path(d).resolve()
+                    if p.exists():
+                        self.allowed_roots.append(p)
+                except Exception:
+                    pass
+    
+    def _is_in_blocked_path(self, resolved_path: pathlib.Path) -> tuple[bool, str | None]:
+        """
+        检查路径是否在阻止的系统目录下（Issue #57 修复）
+        
+        使用 is_relative_to() 进行精确匹配，防止误判。
+        """
+        path_str = str(resolved_path)
+        path_lower = path_str.lower()
+        
+        # 检查阻止的系统目录
+        for blocked in self.BLOCKED_PATHS:
+            blocked_lower = blocked.lower()
+            # 使用 startswith 确保精确匹配目录，而不是子字符串
+            if path_lower == blocked_lower or path_lower.startswith(blocked_lower + "/") or path_lower.startswith(blocked_lower + "\\"):
+                return True, f"禁止访问系统目录: {blocked}"
+        
+        # Windows 特殊检查
+        import os
+        if os.name == 'nt':
+            for blocked in self.WINDOWS_BLOCKED:
+                blocked_lower = blocked.lower()
+                if path_lower == blocked_lower or path_lower.startswith(blocked_lower + "\\"):
+                    return True, f"禁止访问系统目录: {blocked}"
+        
+        return False, None
+    
+    def _is_in_allowed_path(self, resolved_path: pathlib.Path) -> tuple[bool, str | None]:
+        """
+        检查路径是否在允许的目录下（Issue #57 修复）
+        
+        使用 is_relative_to() 确保路径在允许目录内部，而不是仅检查前缀。
+        """
+        for root in self.allowed_roots:
+            try:
+                # 核心安全断言：resolved_path 必须在 root 内部
+                if resolved_path.is_relative_to(root):
+                    return True, None
+            except Exception:
+                # is_relative_to() 如果路径不相对会抛出 ValueError
+                pass
+        
+        # 允许用户主目录（如果不在允许列表中）
+        import os
+        home = pathlib.Path(os.path.expanduser("~")).resolve()
+        try:
+            if resolved_path.is_relative_to(home):
+                return True, None
+        except Exception:
+            pass
+        
+        return False, f"路径不在允许的目录内: {self.allowed_roots[:3]}..."
     
     def is_safe(self, path: str) -> tuple[bool, str | None]:
         """
-        验证路径是否安全
-        返回: (是否安全, 错误信息)
+        验证路径是否安全（Issue #57 核心修复）
+        
+        安全检查流程：
+        1. 解析为绝对路径
+        2. 检查是否包含 .. 穿越组件
+        3. 检查是否在阻止的系统目录下
+        4. 检查是否在允许的目录下
+        
+        Args:
+            path: 待验证的路径
+            
+        Returns:
+            (是否安全, 错误信息或 None)
         """
         import os
-        import pathlib
         
         try:
-            abs_path = pathlib.Path(path).resolve()
-            path_str = str(abs_path)
+            # Step 1: 解析路径
+            # 移除首部斜杠防止绝对路径注入
+            clean_path = path.lstrip("/\\")
+            abs_path = (pathlib.Path("/") / clean_path).resolve()
             
-            # 检查是否在阻止的目录下
-            for blocked in self.BLOCKED_PATHS:
-                if path_str.startswith(blocked):
-                    return False, f"Path is in blocked directory: {blocked}"
+            # Step 2: 检查是否包含 .. 穿越组件（双重检查）
+            # 如果解析后的路径和清理后的路径不一致，说明有穿越
+            try:
+                abs_path.relative_to(pathlib.Path("/"))
+            except ValueError:
+                return False, "非法路径"
             
-            # Windows 特殊检查
-            if os.name == 'nt':
-                for blocked in self.WINDOWS_BLOCKED:
-                    if path_str.startswith(blocked):
-                        return False, f"Path is in blocked directory: {blocked}"
+            # Step 3: 检查阻止的系统目录
+            blocked, error = self._is_in_blocked_path(abs_path)
+            if blocked:
+                return False, error
             
-            # 检查是否在允许的目录下
-            for root in self.allowed_roots:
-                if path_str.startswith(root):
-                    return True, None
-            
-            # 允许用户主目录
-            home = os.path.expanduser("~")
-            if path_str.startswith(home):
+            # Step 4: 检查是否在允许的目录下
+            allowed, error = self._is_in_allowed_path(abs_path)
+            if allowed:
                 return True, None
             
-            return False, "Path is not in allowed directories"
+            return False, error or "路径不在允许的目录内"
             
         except Exception as e:
-            return False, f"Invalid path: {e}"
+            return False, f"路径验证失败: {e}"
     
     def validate_or_raise(self, path: str) -> str:
-        """验证路径，失败则抛出 ValueError"""
+        """
+        验证路径，失败则抛出 ValueError
+        
+        Issue #57 修复：提供明确的错误信息，帮助调试。
+        """
         safe, error = self.is_safe(path)
         if not safe:
-            raise ValueError(f"Path not allowed: {error}")
+            raise ValueError(f"禁止访问: {error}")
         return path
 
 

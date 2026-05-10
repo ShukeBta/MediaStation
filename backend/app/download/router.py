@@ -126,7 +126,7 @@ async def start_auto_sync(user: CurrentUser):
                 # 记录错误但继续运行
                 import logging
                 logger = logging.getLogger(__name__)
-                logger.error(f'Auto sync error: {e}')
+                logger.error(f"Auto sync error: {e}")
             await asyncio.sleep(5)
 
     # 在后台启动自动同步任务

@@ -12,11 +12,80 @@ import string
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# ── 下载路径安全校验 ──
+
+def validate_download_path(requested_path: str, base_download_dir: str) -> str:
+    """
+    验证下载保存路径的安全性，防止路径穿越攻击（RCE漏洞修复）
+    
+    安全规则：
+    1. 拒绝绝对路径（以 / 或盘符开头）
+    2. 解析后必须在 base_download_dir 内部
+    3. 拒绝包含 .. 的路径组件
+    
+    Args:
+        requested_path: 用户请求的保存路径
+        base_download_dir: 系统配置的下载根目录
+        
+    Returns:
+        验证通过后的安全路径
+        
+    Raises:
+        ValueError: 路径不安全
+    """
+    if not requested_path:
+        return base_download_dir
+    
+    # 1. 拒绝绝对路径
+    if Path(requested_path).is_absolute():
+        raise ValueError(
+            f"非法操作：禁止使用绝对路径 '{requested_path}'。"
+            f"必须使用相对于下载目录的相对路径。"
+        )
+    
+    # 2. 拒绝包含 .. 的路径（防止目录穿越）
+    path_parts = Path(requested_path).parts
+    if ".." in path_parts:
+        raise ValueError(
+            f"非法操作：路径包含非法组件 '..'。禁止访问下载目录之外的位置。"
+        )
+    
+    # 3. 解析最终路径，确保它在 base_download_dir 内部
+    base_path = Path(base_download_dir).resolve()
+    target_path = (base_path / requested_path).resolve()
+    
+    # 4. 核心安全断言：目标路径必须在 base_path 内部
+    try:
+        target_path.relative_to(base_path)
+    except ValueError:
+        raise ValueError(
+            f"非法操作：禁止跨目录下载文件。"
+            f"请求的路径解析后为 '{target_path}'，超出了允许的下载目录范围。"
+        )
+    
+    # 5. 拒绝指向系统敏感目录的路径（额外保护层）
+    SENSITIVE_DIRS = [
+        "/etc", "/root", "/home", "/var", "/usr", "/bin", "/sbin",
+        "/boot", "/dev", "/proc", "/sys", "/run", "/snap",
+        "C:\\Windows", "C:\\Program Files", "C:\\ProgramData"
+    ]
+    
+    target_str = str(target_path).lower()
+    for sensitive in SENSITIVE_DIRS:
+        if target_str.startswith(sensitive.lower()):
+            raise ValueError(
+                f"非法操作：禁止在系统敏感目录 '{sensitive}' 中下载文件。"
+            )
+    
+    logger.info(f"路径校验通过: '{requested_path}' -> '{target_path}'")
+    return str(target_path)
 
 
 @dataclass
@@ -487,7 +556,12 @@ class QBittorrentAdapter(DownloadClientAdapter):
 
         data: dict[str, str] = {}
         if save_path:
-            data["savepath"] = save_path
+            # ── Issue #54 修复：路径安全校验 ──
+            from app.config import get_settings
+            settings = get_settings()
+            safe_path = validate_download_path(save_path, settings.download_dir)
+            data["savepath"] = safe_path
+            logger.info(f"Download path validated: '{save_path}' -> '{safe_path}'")
         
         # 使用临时 category 来识别新添加的种子（避免竞态）
         data["category"] = temp_category
@@ -958,7 +1032,13 @@ class TransmissionAdapter(DownloadClientAdapter):
     ) -> str:
         arguments: dict[str, Any] = {"filename": url}
         if save_path:
-            arguments["download-dir"] = save_path
+            # ── Issue #54 修复：路径安全校验 ──
+            from app.config import get_settings
+            settings = get_settings()
+            safe_path = validate_download_path(save_path, settings.download_dir)
+            arguments["download-dir"] = safe_path
+            logger.info(f"Transmission download path validated: '{save_path}' -> '{safe_path}'")
+        
         result = await self._rpc_call("torrent-add", arguments)
         torrent = result.get("arguments", {}).get("torrent-added", {})
         return str(torrent.get("hashString", ""))
@@ -1105,7 +1185,13 @@ class Aria2Adapter(DownloadClientAdapter):
                 # URL 类型：magnet 或远程资源
                 options = {}
                 if save_path:
-                    options["dir"] = save_path
+                    # ── Issue #54 修复：路径安全校验 ──
+                    from app.config import get_settings
+                    settings = get_settings()
+                    safe_path = validate_download_path(save_path, settings.download_dir)
+                    options["dir"] = safe_path
+                    logger.info(f"Aria2 download path validated: '{save_path}' -> '{safe_path}'")
+                
                 if category:
                     options["all-subscription"] = category  # 使用 Aria2 的订阅名标记
 
@@ -1122,7 +1208,11 @@ class Aria2Adapter(DownloadClientAdapter):
 
                 options = {}
                 if save_path:
-                    options["dir"] = save_path
+                    # ── Issue #54 修复：路径安全校验 ──
+                    from app.config import get_settings
+                    settings = get_settings()
+                    safe_path = validate_download_path(save_path, settings.download_dir)
+                    options["dir"] = safe_path
 
                 result = await self._call("addTorrent", [torrent_b64, [], options])
                 gid = result.get("result", "")

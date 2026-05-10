@@ -14,9 +14,77 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import html
+
 from app.media.models import MediaItem
 
 logger = logging.getLogger(__name__)
+
+# ── HTML 清洗（防止 XSS）──
+def sanitize_text(text: str | None) -> str | None:
+    """
+    清洗文本，移除所有 HTML 标签和危险属性（Issue #55 修复）
+    
+    用于清洗从 NFO 文件解析的元数据（如 plot/overview），
+    防止存储型 XSS 攻击。
+    
+    Args:
+        text: 原始文本（可能包含 HTML 标签）
+        
+    Returns:
+        清洗后的纯文本，如果输入为 None 则返回 None
+    """
+    if not text:
+        return text
+    
+    try:
+        # 方法1：使用 html.parser 移除所有 HTML 标签
+        from html.parser import HTMLParser
+        
+        class MLStripper(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.reset()
+                self.strict = False
+                self.convert_charrefs = True
+                self.fed = []
+                
+            def handle_data(self, d):
+                self.fed.append(d)
+                
+            def get_data(self):
+                return ''.join(self.fed)
+        
+        # 尝试使用 bleach（如果已安装）
+        try:
+            import bleach
+            # 仅允许极少量的安全标签（基本上不允许任何标签）
+            allowed_tags = []  # 不允许任何 HTML 标签
+            allowed_attrs = {}
+            cleaned = bleach.clean(
+                text,
+                tags=allowed_tags,
+                attributes=allowed_attrs,
+                strip=True,  # 移除所有标签，只保留文本内容
+            )
+            # HTML 实体解码
+            cleaned = html.unescape(cleaned).strip()
+            return cleaned if cleaned else None
+            
+        except ImportError:
+            # fallback：使用 HTMLParser 移除所有标签
+            stripper = MLStripper()
+            stripper.feed(text)
+            cleaned = stripper.get_data()
+            # HTML 实体解码
+            cleaned = html.unescape(cleaned).strip()
+            return cleaned if cleaned else None
+            
+    except Exception as e:
+        logger.warning(f"HTML sanitization failed: {e}")
+        # 最后防线：使用正则移除所有 <...> 标签
+        cleaned = re.sub(r'<[^>]+>', '', text)
+        return cleaned.strip() if cleaned.strip() else None
 
 # 支持的视频格式
 VIDEO_EXTENSIONS = {
@@ -224,20 +292,20 @@ def parse_nfo_file(nfo_path: Path) -> dict | None:
                         result["tmdb_id"] = int(tmdb_elem.text)
                         result["media_type"] = "tv"
 
-                # 提取剧集标题
+                # 提取剧集标题（Issue #55 修复：清洗 HTML 标签防止 XSS）
                 title_elem = root.find(".//title")
                 if title_elem is not None and title_elem.text:
-                    result["title"] = title_elem.text.strip()
+                    result["title"] = sanitize_text(title_elem.text)
 
-                # 提取plot
+                # 提取plot（Issue #55 修复：清洗 HTML 标签防止 XSS）
                 plot_elem = root.find(".//plot")
                 if plot_elem is not None and plot_elem.text:
-                    result["plot"] = plot_elem.text.strip()
+                    result["plot"] = sanitize_text(plot_elem.text)
 
                 # 提取outline
                 outline_elem = root.find(".//outline")
                 if outline_elem is not None and outline_elem.text and "plot" not in result:
-                    result["plot"] = outline_elem.text.strip()
+                    result["plot"] = sanitize_text(outline_elem.text)
 
                 # 提取播出日期
                 aired_elem = root.find(".//aired")
