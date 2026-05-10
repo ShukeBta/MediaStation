@@ -178,8 +178,11 @@ async def global_error_handler(request: Request, exc: Exception):
     # 放行 FastAPI 的请求参数校验异常
     if isinstance(exc, RequestValidationError):
         return JSONResponse(status_code=422, content={"detail": exc.errors()})
-
+    
+    import traceback
+    error_detail = traceback.format_exc()
     logger.error(f"Unhandled error: {exc}", exc_info=True)
+    # 生产环境：返回通用错误信息
     return JSONResponse(
         status_code=500,
         content={"code": "INTERNAL_ERROR", "message": "Internal server error"},

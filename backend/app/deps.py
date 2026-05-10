@@ -34,7 +34,10 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
       同时消除纯查询接口上无意义的事务提交 I/O 开销。
     - async_session_factory 的 async_context_manager 在退出时会自动调用 session.close()。
     """
-    async with async_session_factory() as session:
+    # 使用 get_session_factory() 确保引擎已初始化
+    from app.database import get_session_factory
+    factory = get_session_factory()
+    async with factory() as session:
         yield session
 
 
