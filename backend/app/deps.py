@@ -25,14 +25,17 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """数据库会话依赖"""
+    """数据库会话依赖
+
+    Issue #33 修复：移除自动提交（Auto-Commit Anti-Pattern）。
+    - 框架层只负责提供 Session，不做隐式 commit。
+    - 事务的 commit/rollback 由具体的 Service 层或 Router 显式调用。
+    - 避免非异常路径（如 return JSONResponse(400)）误提交脏数据；
+      同时消除纯查询接口上无意义的事务提交 I/O 开销。
+    - async_session_factory 的 async_context_manager 在退出时会自动调用 session.close()。
+    """
     async with async_session_factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
+        yield session
 
 
 async def get_current_user(

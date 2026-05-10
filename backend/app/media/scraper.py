@@ -109,29 +109,22 @@ class TMDbClient:
     # ── 获取英文标题（用于站点搜索） ──
     async def get_english_title(self, tmdb_id: int, media_type: str) -> str | None:
         """
-        获取 TMDB 影视的英文标题，用于站点搜索
-        注意：需要使用 language=en 来获取原始英文名
+        获取 TMDB 影视的英文标题，用于站点搜索。
+        Issue #31 修复：复用现有 self.client 连接池，通过覆盖单次请求的 params
+        传入 language=en，避免每次调用都创建新 httpx.AsyncClient 导致的
+        100 次 TCP+TLS 握手开销。
         """
         try:
-            # 创建一个使用英文的 client
-            en_client = httpx.AsyncClient(
-                base_url=self.base_url,
-                params={"api_key": self.api_key, "language": "en"},
-                timeout=30.0,
-            )
-            try:
-                if media_type == "movie":
-                    resp = await en_client.get(f"/movie/{tmdb_id}")
-                else:
-                    resp = await en_client.get(f"/tv/{tmdb_id}")
-                resp.raise_for_status()
-                data = resp.json()
-                # 对于电影，使用 original_title；对于剧集，使用 original_name
-                english_title = data.get("original_title") or data.get("original_name")
-                logger.debug(f"[TMDb] 获取英文标题 TMDB {tmdb_id}: {english_title}")
-                return english_title
-            finally:
-                await en_client.aclose()
+            endpoint = f"/movie/{tmdb_id}" if media_type == "movie" else f"/tv/{tmdb_id}"
+            # 合并 params：覆盖 language 为 en，其余参数（api_key 等）由 self.client 默认提供
+            params = {"api_key": self.api_key, "language": "en"}
+            resp = await self.client.get(endpoint, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+            # 对于电影，使用 original_title；对于剧集，使用 original_name
+            english_title = data.get("original_title") or data.get("original_name")
+            logger.debug(f"[TMDb] 获取英文标题 TMDB {tmdb_id}: {english_title}")
+            return english_title
         except Exception as e:
             logger.warning(f"[TMDb] 获取英文标题失败 {tmdb_id}: {e}")
             return None

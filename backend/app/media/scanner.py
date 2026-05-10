@@ -147,55 +147,11 @@ def is_poster_file(path: Path) -> bool:
 
 def find_poster(video_path: Path) -> Path | None:
     """
-    查找视频关联的海报图片
-
-    搜索顺序：
-    1. 同名图片 (video.mkv -> video.jpg)
-    2. 标准命名 (poster.jpg, cover.png, folder.jpg, thumb.jpg, fanart.jpg, backdrop.jpg, movie.jpg)
-    3. 父目录查找 (对于剧集，在剧集根目录查找)
+    查找视频关联的优先级最高的海报图片。
+    Issue #32 修复：直接复用 find_all_posters 取第一个结果，消除重复磁盘 I/O。
     """
-    parent = video_path.parent
-    grandparent = parent.parent if parent.parent != parent else None
-    video_stem = video_path.stem
-
-    # 规则1: 同名图片
-    for ext in POSTER_EXTENSIONS:
-        poster_path = parent / f"{video_stem}{ext}"
-        if poster_path.exists():
-            logger.debug(f"Found poster (same name): {poster_path}")
-            return poster_path
-
-    # 规则2: 标准命名
-    for name in POSTER_NAMES:
-        for ext in POSTER_EXTENSIONS:
-            poster_path = parent / f"{name}{ext}"
-            if poster_path.exists():
-                logger.debug(f"Found poster (standard name): {poster_path}")
-                return poster_path
-
-    # 规则3: 父目录查找 (对于剧集)
-    if grandparent:
-        for name in POSTER_NAMES:
-            for ext in POSTER_EXTENSIONS:
-                poster_path = grandparent / f"{name}{ext}"
-                if poster_path.exists():
-                    logger.debug(f"Found poster (grandparent): {poster_path}")
-                    return poster_path
-
-    # 规则4: 向上递归查找最多2层目录
-    current_dir = parent
-    for _ in range(2):
-        if current_dir.parent == current_dir:
-            break
-        current_dir = current_dir.parent
-        for name in POSTER_NAMES:
-            for ext in POSTER_EXTENSIONS:
-                poster_path = current_dir / f"{name}{ext}"
-                if poster_path.exists():
-                    logger.debug(f"Found poster (recursive): {poster_path}")
-                    return poster_path
-
-    return None
+    posters = find_all_posters(video_path)
+    return posters[0] if posters else None
 
 
 def find_all_posters(video_path: Path) -> list[Path]:
@@ -871,15 +827,12 @@ class MediaScanner:
             # 查找关联字幕
             info["subtitles"] = self._find_subtitles(vf)
 
-            # 查找关联海报（优先使用 NFO 中的，补充使用本地海报）
-            poster_path = find_poster(vf)
-            if poster_path:
-                info["local_poster"] = str(poster_path)
-                logger.debug(f"Found local poster for {vf.name}: {poster_path}")
-
-            # 查找所有海报（备用）
+            # Issue #32 修复：只调用一次 find_all_posters，取第一个作为主海报
+            # 避免 find_poster + find_all_posters 两次重复遍历同一目录的磁盘 I/O
             all_posters = find_all_posters(vf)
             if all_posters:
+                info["local_poster"] = str(all_posters[0])
+                logger.debug(f"Found local poster for {vf.name}: {all_posters[0]}")
                 info["all_posters"] = [str(p) for p in all_posters]
 
             results.append(info)

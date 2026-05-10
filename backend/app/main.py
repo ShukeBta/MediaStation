@@ -113,6 +113,16 @@ async def lifespan(app: FastAPI):
         logger.info("File watcher stopped")
     except Exception as e:
         logger.warning(f"File watcher stop failed: {e}")
+
+    # Issue #36 修复：显式关闭全局 TMDb HTTP 客户端，优雅释放 TCP 长连接。
+    # 若不关闭，容器/热重载频繁重启时底层 socket 不发送 FIN，最终导致操作系统端口耗尽。
+    try:
+        from app.media.scraper import get_tmdb_client
+        await get_tmdb_client().close()
+        logger.info("TMDb client closed")
+    except Exception as e:
+        logger.warning(f"TMDb client close failed: {e}")
+
     await close_db()
     logger.info("MediaStation stopped")
 

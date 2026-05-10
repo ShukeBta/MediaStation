@@ -118,9 +118,14 @@ async def job_scan_libraries():
                             f"Scrape {lib.name}: +{scrape_stats['scraped']} scraped, "
                             f"-{scrape_stats['failed']} failed"
                         )
+
+                    await session.commit()
                 except Exception as e:
                     logger.error(f"Scan {lib.name} failed: {e}")
-                await session.commit()
+                    # Issue #34 修复：在单个库扫描失败后立即回滚，清理事务失效状态。
+                    # 若不回滚，SQLAlchemy 会将 Session 标记为 Invalidated，
+                    # 下一次循环访问数据库时抛出 PendingRollbackError，导致后续所有库全部瘫痪。
+                    await session.rollback()
         except Exception as e:
             logger.error(f"Job scan_libraries failed: {e}")
 
