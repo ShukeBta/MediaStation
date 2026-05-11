@@ -14,7 +14,7 @@ import os
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Body
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -73,7 +73,6 @@ async def get_emby_current_user(
     if user is None or not user.is_active:
         raise credentials_exception
     
-    from app.user.schemas import UserOut
     return UserOut.model_validate(user)
 
 
@@ -3162,39 +3161,6 @@ async def emby_music_genres(
     }
 
 
-# ── Videos Chapters（章节）──
-
-@router.get("/Videos/{item_id}/Chapters")
-async def emby_video_chapters(
-    item_id: int,
-    user: EmbyUser,
-    db: DB,
-):
-    """
-    获取视频章节信息。
-    """
-    repo = MediaRepository(db)
-    item = await repo.get_item_by_id(item_id)
-
-    if not item:
-        return {"Chapters": []}
-
-    # 返回模拟章节（基于时长分割）
-    chapters = []
-    if item.duration and item.duration > 60:
-        chapter_count = min(8, item.duration // 600)  # 约10分钟一章
-        for i in range(chapter_count):
-            start_ticks = (item.duration * i // chapter_count) * 10_000_000
-            end_ticks = (item.duration * (i + 1) // chapter_count) * 10_000_000
-            chapters.append({
-                "Name": f"Chapter {i + 1}",
-                "StartPositionTicks": start_ticks,
-                "EndPositionTicks": end_ticks if i < chapter_count - 1 else item.duration * 10_000_000,
-                "ImageUrl": None,
-            })
-
-    return {"Chapters": chapters}
-
 
 # ── Videos AdditionalParts（额外部分）──
 
@@ -3241,7 +3207,7 @@ async def emby_special_features(
     items = []
     for t in trailers[0] if trailers else []:
         if t.id != item_id:
-            items.append(_to_emby_item(t, db))
+            items.append(_item_to_emby_format(t))
 
     return {
         "Items": items[:5],
@@ -3466,7 +3432,7 @@ async def emby_collection_items(
         items, total = [], 0
 
     return {
-        "Items": [_to_emby_item(i, db) for i in items],
+        "Items": [_item_to_emby_format(i) for i in items],
         "TotalRecordCount": total,
         "StartIndex": start_index,
     }
@@ -3740,7 +3706,7 @@ async def emby_movie_recommendations(
     )
 
     return {
-        "Items": [_to_emby_item(i, db) for i in items],
+        "Items": [_item_to_emby_format(i) for i in items],
         "TotalRecordCount": total,
         "CategoryId": category_id,
         "CategoryName": "Recommended for You",
@@ -3770,7 +3736,7 @@ async def emby_show_recommendations(
     )
 
     return {
-        "Items": [_to_emby_item(i, db) for i in items],
+        "Items": [_item_to_emby_format(i) for i in items],
         "TotalRecordCount": total,
         "CategoryId": category_id,
         "CategoryName": "Recommended for You",
@@ -3813,7 +3779,7 @@ async def emby_item_recommendations(
     filtered = [i for i in items if i.id != item_id][:limit]
 
     return {
-        "Items": [_to_emby_item(i, db) for i in filtered],
+        "Items": [_item_to_emby_format(i) for i in filtered],
         "TotalRecordCount": len(filtered),
         "CategoryId": category_id,
     }
@@ -4364,7 +4330,7 @@ async def emby_similar_items(
     filtered = [i for i in items if i.id != item_id][:limit]
 
     return {
-        "Items": [_to_emby_item(i, db) for i in filtered],
+        "Items": [_item_to_emby_format(i) for i in filtered],
         "TotalRecordCount": len(filtered),
     }
 
@@ -4708,7 +4674,7 @@ async def emby_suggestions(
     )
 
     return {
-        "Items": [_to_emby_item(i, db) for i in items],
+        "Items": [_item_to_emby_format(i) for i in items],
         "TotalRecordCount": total,
     }
 
@@ -4815,7 +4781,7 @@ async def emby_instant_mix(
     )
 
     return {
-        "Items": [_to_emby_item(i, db) for i in items if i.id != item_id][:limit],
+        "Items": [_item_to_emby_format(i) for i in items if i.id != item_id][:limit],
         "TotalRecordCount": min(total - 1, limit),
     }
 

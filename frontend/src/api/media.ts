@@ -19,7 +19,6 @@ export const mediaApi = {
   // 刮削
   scrapeItem: (id: number, data?: any) => api.post(`/api/media/${id}/scrape`, data || {}),
   aiScrape: (id: number, data: any) => api.post(`/api/media/${id}/ai-scrape`, data),
-  testAiConfig: () => api.post('/api/ai-scrape/config/test'),
   searchTmdb: (query: string, type?: string) =>
     api.get('/api/search/tmdb', { params: { query, media_type: type || 'movie' } }),
 
@@ -41,22 +40,4 @@ export const mediaApi = {
 
   // 全局搜索
   search: (q: string, limit?: number) => api.get('/api/search', { params: { q, limit } }),
-
-  // ── AI 章节 ──
-  aiGenerateChapters: (id: number) => api.post(`/api/media/${id}/ai/chapters`),
-  getChapters: (id: number) => api.get(`/api/media/${id}/chapters`),
-  createChapter: (id: number, data: any) => api.post(`/api/media/${id}/chapters`, data),
-  deleteChapter: (id: number, chapterId: number) => api.delete(`/api/media/${id}/chapters/${chapterId}`),
-
-  // ── AI 精彩片段 ──
-  aiExtractHighlights: (id: number) => api.post(`/api/media/${id}/ai/highlights`),
-  getHighlights: (id: number) => api.get(`/api/media/${id}/highlights`),
-
-  // ── AI 封面候选 ──
-  aiGenerateCovers: (id: number) => api.post(`/api/media/${id}/ai/covers`),
-  getCoverCandidates: (id: number) => api.get(`/api/media/${id}/covers`),
-  selectCover: (id: number, coverId: number) => api.post(`/api/media/${id}/covers/${coverId}/select`),
-
-  // ── 视频截帧 ──
-  getThumbnail: (id: number) => api.get(`/api/media/${id}/thumbnail`),
 }

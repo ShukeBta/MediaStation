@@ -86,8 +86,6 @@ class MediaService:
 
     # ── 媒体库管理 ──
     async def list_libraries(self) -> list[LibraryOut]:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.info("[MediaService] list_libraries() called")
         libraries = await self.repo.get_all_libraries()
         logger.info(f"[MediaService] Found {len(libraries)} libraries")
@@ -100,8 +98,6 @@ class MediaService:
         return result
 
     async def create_library(self, data: LibraryCreate) -> LibraryOut:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.info(f"[MediaService] create_library: {data}")
         lib = await self.repo.create_library(
             name=data.name, path=data.path, media_type=data.media_type,
@@ -544,25 +540,13 @@ class MediaService:
             try:
                 # 检测是否是 18+ 内容
                 filename = ""
-                if item.path:
+                if item.file_path:
                     import os
-                    filename = os.path.basename(item.path)
+                    filename = os.path.basename(item.file_path)
 
-                # 🔍 调试日志：记录成人内容检测过程
-                item_path = str(item.path) if item.path else ""
+                item_path = str(item.file_path) if item.file_path else ""
                 is_adult = is_adult_content(filename, item_path)
-                logger.info(f"[MediaService] === 刮削检测开始 ===")
-                logger.info(f"[MediaService] 文件名: {filename}")
-                logger.info(f"[MediaService] 完整路径: {item_path}")
-                logger.info(f"[MediaService] is_adult_content 结果: {is_adult}")
-                
-                # 调试：检查目录名是否包含成人关键词
-                if item_path:
-                    import os as _os
-                    dir_name = _os.path.dirname(item_path)
-                    logger.info(f"[MediaService] 目录名: {dir_name}")
-                    if "9KG" in dir_name.upper() or "9KG" in filename.upper():
-                        logger.info(f"[MediaService] ⚠️ 检测到 9KG 目录/文件名!")
+                logger.info(f"[MediaService] 文件名: {filename}, 路径: {item_path}, is_adult: {is_adult}")
 
                 if is_adult:
                     # 使用 AdultProvider 刮削
@@ -588,7 +572,7 @@ class MediaService:
 
             except ScraperError as e:
                 # 尝试清理标题重试（非 18+ 内容）
-                if not is_adult_content(filename, str(item.path) if item.path else ""):
+                if not is_adult_content(filename, str(item.file_path) if item.file_path else ""):
                     try:
                         clean_title = self._clean_title_for_scrape(item.title)
                         if clean_title and clean_title != item.title:
@@ -623,44 +607,26 @@ class MediaService:
         from app.media.providers.adult import AdultProvider
 
         try:
-            # 解析番号
-            logger.info(f"[AdultScrape] === 开始 AdultProvider 刮削 ===")
-            logger.info(f"[AdultScrape] 正在解析番号: {filename}")
-            
             parsed = parse_code(filename)
             if not parsed:
-                logger.warning(f"[AdultScrape] ❌ 无法从 '{filename}' 解析番号!")
-                logger.warning(f"[AdultScrape] 可能原因: 文件名不符合番号格式 (如 ABC-123, FC2-PPV-xxx)")
-                logger.warning(f"[AdultScrape] 提示: 请确保文件名包含标准番号格式")
-                logger.info(f"[AdultScrape] === AdultProvider 刮削失败 ===\n")
+                logger.warning(f"[AdultScrape] 无法从 '{filename}' 解析番号")
                 return False
 
             code = parsed.code
-            logger.info(f"[AdultScrape] ✓ 成功解析番号: {code}")
-            logger.info(f"[AdultScrape] 番号类型: {parsed.code_type}, 置信度: {parsed.confidence}")
+            logger.info(f"[AdultScrape] 解析番号: {code} (类型={parsed.code_type})")
 
-            # 直接创建 AdultProvider 实例（从数据库加载配置）
             adult_provider = AdultProvider()
-
-            # 检查 AdultProvider 是否已配置
             if not await adult_provider.is_configured():
-                logger.warning("[AdultScrape] ⚠️ AdultProvider 未启用，请在设置中启用")
+                logger.warning("[AdultScrape] AdultProvider 未启用")
                 return False
 
-            logger.info(f"[AdultScrape] AdultProvider 已配置，开始刮削...")
-
-            # 使用 AdultProvider 刮削
             metadata = await adult_provider.get_metadata(code, "movie")
             if not metadata:
-                logger.warning(f"[AdultScrape] ❌ AdultProvider 未返回元数据 for {code}")
-                logger.warning(f"[AdultScrape] 可能原因: 网络问题 / JavBus/JavDB 无法访问 / 番号不存在")
-                logger.info(f"[AdultScrape] === AdultProvider 刮削失败 ===\n")
+                logger.warning(f"[AdultScrape] 未返回元数据: {code}")
                 return False
 
-            # 更新 item 元数据
-            logger.info(f"[AdultScrape] ✓ 刮削成功! 标题: {metadata.title}")
+            logger.info(f"[AdultScrape] 刮削成功: {metadata.title}")
             await self._update_item_metadata(item_id, metadata)
-            logger.info(f"[AdultScrape] === AdultProvider 刮削完成 ===\n")
             return True
 
         except Exception as e:
@@ -674,12 +640,9 @@ class MediaService:
         # 强制确保 genres 是 JSON 字符串（SQLite Text 列不支持 list）
         raw_genres = getattr(metadata, 'genres', None) or []
         if isinstance(raw_genres, str):
-            genres_json = raw_genres  # 已经是字符串，直接使用
+            genres_json = raw_genres
         else:
             genres_json = json.dumps(raw_genres, ensure_ascii=False) if raw_genres else "[]"
-        
-        # 调试日志
-        logger.info(f"[UpdateItem] genres BEFORE type={type(raw_genres).__name__}, AFTER type={type(genres_json).__name__}")
         
         updates = {
             "title": metadata.title,
@@ -870,18 +833,14 @@ class MediaService:
             item_path = str(item.file_path)
 
         is_adult = is_adult_content(filename, item_path)
-        logger.info(f"[ScrapeItem] === 开始刮削 (item_id={item_id}) ===")
-        logger.info(f"[ScrapeItem] 文件名: {filename}")
-        logger.info(f"[ScrapeItem] 完整路径: {item_path}")
-        logger.info(f"[ScrapeItem] is_adult_content 结果: {is_adult}")
+        logger.info(f"[ScrapeItem] item_id={item_id}, 文件名={filename}, is_adult={is_adult}")
 
-        # 检测 9KG 目录
+        # 9KG 等成人目录额外检测
         if item_path and ("9KG" in item_path.upper() or "ADULT" in item_path.upper()):
-            logger.info(f"[ScrapeItem] ⚠️ 检测到成人目录 (9KG/Adult)")
             is_adult = True
 
         if is_adult:
-            logger.info(f"[ScrapeItem] → 使用 AdultProvider 刮削")
+            logger.info(f"[ScrapeItem] 使用 AdultProvider 刮削: {filename}")
             success = await self._scrape_item_adult(item_id, filename)
             if success:
                 # 重新获取更新后的条目
@@ -890,7 +849,7 @@ class MediaService:
                     return MediaItemDetail.model_validate(updated_item)
                 return await self.get_item_detail(item_id)
             # AdultProvider 刮削失败，回退到 TMDb
-            logger.warning(f"[ScrapeItem] AdultProvider 刮削失败，回退到 TMDb")
+            logger.warning(f"[ScrapeItem] AdultProvider 刮削失败，回退 TMDb: {filename}")
             # 不抛出错误，继续往下走 TMDb 刮削流程
 
         # ── 非成人内容：TMDb 刮削（主源）──
