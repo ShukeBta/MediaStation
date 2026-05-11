@@ -915,128 +915,22 @@ class MediaScanner:
         results = [r for r in results_list if r is not None]
         return results
 
-    async def _scan_tv_shows(self, root: Path, media_type: str) -> list[dict]:
-        """扫描剧集文件，支持 Season X 文件夹结构"""
-        results = []
-        # 递归查找所有视频文件
-        video_files = await asyncio.to_thread(self._find_video_files, root)
-
-        # 收集所有Season文件夹信息
-        season_folders = await asyncio.to_thread(self._find_season_folders, root)
-        logger.info(f"Found {len(season_folders)} season folders in {root}")
-
-        # 按目录分组，同时处理嵌套结构
-        # 结构示例: root/Season 6/哈哈哈哈哈（2020）/01.mkv
-        # 或者: root/哈哈哈哈哈（2020）/Season 1/01.mkv
-        show_dirs: dict[Path, dict] = {}
-        for vf in video_files:
-            # 构建路径链
-            path_parts = vf.relative_to(root).parts
-            parent = vf.parent
-            grandparent = parent.parent if parent != root else None
-
-            # 检测Season文件夹层级
-            season_num = None
-            show_dir = parent
-
-            # 情况1: Season X/剧名/视频.mkv -> show_dir = parent (剧名文件夹)
-            # 情况2: 剧名/Season X/视频.mkv -> show_dir = grandparent
-            # 情况3: Season X/视频.mkv -> show_dir = parent (Season文件夹本身是show_dir)
-            # 情况4: 剧名/视频.mkv -> show_dir = parent
-
-            if grandparent and grandparent != root:
-                parent_name = parent.name
-                grandparent_name = grandparent.name
-
-                # Season文件夹在中间层级: 剧名/Season X/视频
-                if is_season_folder(parent_name) and not is_season_folder(grandparent_name):
-                    season_num = parse_season_folder(parent_name)
-                    show_dir = grandparent
-                    logger.debug(f"Case 2: Season {season_num} folder at {parent_name}, show at {grandparent_name}")
-                # Season文件夹在顶层: Season X/剧名/视频
-                elif is_season_folder(grandparent_name) and not is_season_folder(parent_name):
-                    season_num = parse_season_folder(grandparent_name)
-                    show_dir = parent
-                    logger.debug(f"Case 1: Season {season_num} folder at {grandparent_name}, show at {parent_name}")
-                # 两个都是非Season: 剧名/子文件夹/视频
-                else:
-                    season_num = None
-                    show_dir = parent
-            elif parent != root:
-                parent_name = parent.name
-                # Season X/视频.mkv (Season文件夹直接包含视频)
-                if is_season_folder(parent_name):
-                    season_num = parse_season_folder(parent_name)
-                    show_dir = parent
-                    logger.debug(f"Case 3: Season {season_num} folder contains video directly")
-                else:
-                    season_num = None
-                    show_dir = parent
-
-            # 检查是否是Season文件夹本身作为show_dir
-            if is_season_folder(show_dir.name) and show_dir != root:
-                # Season文件夹本身作为show_dir，需要往上再找一层
-                if grandparent and grandparent != root and not is_season_folder(grandparent.name):
-                    show_dir = grandparent
-                    season_num = parse_season_folder(parent.name) or season_num
-
-            if show_dir not in show_dirs:
-                show_dirs[show_dir] = {"season_num": season_num, "files": []}
-            show_dirs[show_dir]["files"].append(vf)
-
-        # 处理每个show_dir
-        for show_dir, info in show_dirs.items():
-            files = info["files"]
-            folder_season_num = info["season_num"]
-
-            # 优先使用节目标NFO（tvshow.nfo）中的标题和TMDB ID
-            show_nfo_path = show_dir / "tvshow.nfo"
-            if not show_nfo_path.exists():
-                # 向上查找一级
-                parent = show_dir.parent
-                if parent != root:
-                    show_nfo_path = parent / "tvshow.nfo"
-
-            show_nfo_data = None
-            if show_nfo_path.exists():
-                show_nfo_data = parse_nfo_file(show_nfo_path)
-                if show_nfo_data:
-                    logger.debug(f"Found show NFO: {show_nfo_path}, tmdb_id={show_nfo_data.get('tmdb_id')}")
-
-            # 解析show名称：优先使用NFO中的标题
-            if show_dir == root:
-                # 扁平结构，使用第一个文件名
-                show_name = parse_media_name(files[0].name)
-            else:
-                # 使用文件夹名作为show名
-                show_name = parse_media_name(show_dir.name)
-                # 如果文件夹名是Season格式，尝试用父目录名
-                if is_season_folder(show_dir.name):
-                    parent_name = show_dir.parent.name
-                    if parent_name != root.name:
-                        show_name = parse_media_name(parent_name)
-
-            # 如果节目标NFO有标题，使用NFO的标题
-            if show_nfo_data and show_nfo_data.get("title"):
-                # 节目标NFO的title是show标题
-                nfo_show_title = show_nfo_data["title"]
-                # 检查是否更像节目标标题（而不是文件名）
-                if len(nfo_show_title) > 2 and not nfo_show_title.startswith("<"):
-                    show_name = nfo_show_title
-                    logger.debug(f"Using show title from NFO: {show_name}")
-
-            for vf in files:
+    async def _process_tv_episode(
+        self, vf: Path, media_type: str, show_name: str,
+        folder_season_num: int | None, show_nfo_data: dict | None,
+    ) -> dict | None:
+        """处理单个剧集文件（带信号量，限制并发）"""
+        async with self._semaphore:
+            try:
                 season_num, episode_num, _ = parse_season_episode(vf.name, include_multi=True)
 
                 # 如果文件名没有季号但文件夹有Season信息，使用文件夹的
                 if season_num is None and folder_season_num is not None:
                     season_num = folder_season_num
 
-                # 使用 asyncio.to_thread 包装阻塞 I/O 调用
                 stat = await asyncio.to_thread(vf.stat)
-                _ = await asyncio.to_thread(vf.exists)  # 检查文件是否存在
 
-                info = {
+                info: dict[str, Any] = {
                     "file_path": str(vf),
                     "file_name": vf.name,
                     "file_size": stat.st_size,
@@ -1065,7 +959,6 @@ class MediaScanner:
                 if ep_nfo_path.exists():
                     ep_nfo_data = parse_nfo_file(ep_nfo_path)
                     if ep_nfo_data:
-                        # 剧集NFO包含剧集标题
                         if ep_nfo_data.get("title"):
                             info["episode_title"] = ep_nfo_data["title"]
                         if ep_nfo_data.get("plot"):
@@ -1081,7 +974,113 @@ class MediaScanner:
                     if not info.get("tmdb_id"):
                         info["tmdb_id"] = show_nfo_data["tmdb_id"]
 
-                results.append(info)
+                return info
+            except Exception as e:
+                logger.warning(f"处理剧集文件失败 {vf}: {e}")
+                return None
+
+    async def _scan_tv_shows(self, root: Path, media_type: str) -> list[dict]:
+        """扫描剧集文件，支持 Season X 文件夹结构（并发处理）"""
+        # 递归查找所有视频文件
+        video_files = await asyncio.to_thread(self._find_video_files, root)
+
+        # 收集所有Season文件夹信息
+        season_folders = await asyncio.to_thread(self._find_season_folders, root)
+        logger.info(f"Found {len(season_folders)} season folders in {root}")
+
+        # 按目录分组，同时处理嵌套结构
+        show_dirs: dict[Path, dict] = {}
+        for vf in video_files:
+            parent = vf.parent
+            grandparent = parent.parent if parent != root else None
+
+            # 检测Season文件夹层级
+            season_num = None
+            show_dir = parent
+
+            if grandparent and grandparent != root:
+                parent_name = parent.name
+                grandparent_name = grandparent.name
+
+                # Season文件夹在中间层级: 剧名/Season X/视频
+                if is_season_folder(parent_name) and not is_season_folder(grandparent_name):
+                    season_num = parse_season_folder(parent_name)
+                    show_dir = grandparent
+                    logger.debug(f"Case 2: Season {season_num} folder at {parent_name}, show at {grandparent_name}")
+                # Season文件夹在顶层: Season X/剧名/视频
+                elif is_season_folder(grandparent_name) and not is_season_folder(parent_name):
+                    season_num = parse_season_folder(grandparent_name)
+                    show_dir = parent
+                    logger.debug(f"Case 1: Season {season_num} folder at {grandparent_name}, show at {parent_name}")
+                else:
+                    season_num = None
+                    show_dir = parent
+            elif parent != root:
+                parent_name = parent.name
+                if is_season_folder(parent_name):
+                    season_num = parse_season_folder(parent_name)
+                    show_dir = parent
+                    logger.debug(f"Case 3: Season {season_num} folder contains video directly")
+                else:
+                    season_num = None
+                    show_dir = parent
+
+            # 检查是否是Season文件夹本身作为show_dir
+            if is_season_folder(show_dir.name) and show_dir != root:
+                if grandparent and grandparent != root and not is_season_folder(grandparent.name):
+                    show_dir = grandparent
+                    season_num = parse_season_folder(parent.name) or season_num
+
+            if show_dir not in show_dirs:
+                show_dirs[show_dir] = {"season_num": season_num, "files": []}
+            show_dirs[show_dir]["files"].append(vf)
+
+        # 并发处理所有剧集文件
+        all_tasks: list[asyncio.Task] = []
+        for show_dir, dir_info in show_dirs.items():
+            files = dir_info["files"]
+            folder_season_num = dir_info["season_num"]
+
+            # 解析节目标NFO（tvshow.nfo）
+            show_nfo_path = show_dir / "tvshow.nfo"
+            if not show_nfo_path.exists():
+                parent = show_dir.parent
+                if parent != root:
+                    show_nfo_path = parent / "tvshow.nfo"
+
+            show_nfo_data = None
+            if show_nfo_path.exists():
+                show_nfo_data = parse_nfo_file(show_nfo_path)
+                if show_nfo_data:
+                    logger.debug(f"Found show NFO: {show_nfo_path}, tmdb_id={show_nfo_data.get('tmdb_id')}")
+
+            # 解析show名称
+            if show_dir == root:
+                show_name = parse_media_name(files[0].name)
+            else:
+                show_name = parse_media_name(show_dir.name)
+                if is_season_folder(show_dir.name):
+                    parent_name = show_dir.parent.name
+                    if parent_name != root.name:
+                        show_name = parse_media_name(parent_name)
+
+            if show_nfo_data and show_nfo_data.get("title"):
+                nfo_show_title = show_nfo_data["title"]
+                if len(nfo_show_title) > 2 and not nfo_show_title.startswith("<"):
+                    show_name = nfo_show_title
+                    logger.debug(f"Using show title from NFO: {show_name}")
+
+            # 为每个文件创建并发任务
+            for vf in files:
+                all_tasks.append(
+                    self._process_tv_episode(
+                        vf, media_type, show_name, folder_season_num, show_nfo_data,
+                    )
+                )
+
+        # 并发执行所有文件处理（信号量限制并发数）
+        results_list = await asyncio.gather(*all_tasks)
+        results = [r for r in results_list if r is not None]
 
         logger.info(f"Scanned TV shows in {root}: found {len(results)} episodes from {len(show_dirs)} shows")
         return results
