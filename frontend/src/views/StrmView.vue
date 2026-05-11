@@ -101,7 +101,7 @@
           class="p-4 rounded-lg border bg-[var(--bg-secondary)] border-[var(--border-primary)] space-y-3">
           <div class="flex items-start gap-4">
             <div class="w-12 h-18 rounded overflow-hidden bg-[var(--bg-input)] shrink-0">
-              <img v-if="item.poster_url" :src="item.poster_url" :alt="item.title" class="w-full h-full object-cover" />
+              <img v-if="item.poster_url" :src="item.poster_url" :alt="item.title" class="w-full h-full object-cover" referrerpolicy="no-referrer" @error="(e) => { (e.target as HTMLImageElement).style.display = 'none' }" />
             </div>
             <div class="flex-1 min-w-0">
               <div class="font-medium truncate">{{ item.title }}</div>
@@ -166,7 +166,7 @@
         <div v-for="item in strmMediaList" :key="item.media_id"
           class="flex items-center gap-4 p-3 rounded-lg hover:bg-[var(--bg-hover)] transition-colors group">
           <div class="w-10 h-14 rounded overflow-hidden bg-[var(--bg-input)] shrink-0">
-            <img v-if="item.poster_url" :src="item.poster_url" :alt="item.title" class="w-full h-full object-cover" />
+            <img v-if="item.poster_url" :src="item.poster_url" :alt="item.title" class="w-full h-full object-cover" referrerpolicy="no-referrer" @error="(e) => { (e.target as HTMLImageElement).style.display = 'none' }" />
           </div>
           <div class="flex-1 min-w-0">
             <div class="text-sm font-medium truncate">{{ item.title }}</div>

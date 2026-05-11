@@ -138,7 +138,7 @@
       <div v-else-if="localResults.length > 0" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
         <div v-for="item in localResults" :key="item.id" class="cursor-pointer group" @click="$router.push(`/media/${item.id}`)">
           <div class="rounded-lg bg-[var(--bg-input)] overflow-hidden aspect-[2/3] relative shadow-md group-hover:shadow-xl transition-all duration-300">
-            <img v-if="item.poster_url" :src="item.poster_url" :alt="item.title" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+            <img v-if="item.poster_url" :src="item.poster_url" :alt="item.title" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" referrerpolicy="no-referrer" @error="(e) => { (e.target as HTMLImageElement).style.display = 'none' }" />
             <div v-else class="w-full h-full flex items-center justify-center" style="color: var(--text-faint)">
               <svg class="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/></svg>
             </div>
@@ -288,8 +288,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRoute, useRouter, onBeforeRouteUpdate } from 'vue-router'
 import { mediaApi } from '@/api/media'
 import { subscribeApi } from '@/api/subscribe'
 import { useToast } from '@/composables/useToast'
@@ -508,14 +508,16 @@ async function copyTmdbId() {
   } catch { /* ignore */ }
 }
 
-// 监听路由变化
-watch(() => route.query.q, (newQ) => {
-  query.value = newQ as string || ''
-  searchQuery.value = query.value
-  if (query.value) {
-    performSearch()
-  } else {
-    results.value = []
+// 路由更新时重新搜索（仅当组件复用时触发）
+onBeforeRouteUpdate((to, from) => {
+  if (to.query.q !== from.query.q) {
+    query.value = to.query.q as string || ''
+    searchQuery.value = query.value
+    if (query.value) {
+      performSearch()
+    } else {
+      results.value = []
+    }
   }
 })
 

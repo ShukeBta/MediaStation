@@ -180,7 +180,7 @@
               {{ index + 1 }}
             </div>
             <div class="w-10 h-14 rounded overflow-hidden bg-[var(--bg-input)] shrink-0">
-              <img v-if="item.poster_url" :src="item.poster_url" class="w-full h-full object-cover" />
+              <img v-if="item.poster_url" :src="item.poster_url" class="w-full h-full object-cover" referrerpolicy="no-referrer" @error="(e) => { (e.target as HTMLImageElement).style.display = 'none' }" />
             </div>
             <div class="flex-1 min-w-0">
               <div class="text-sm font-medium truncate group-hover:text-[var(--accent)]">{{ item.title }}</div>

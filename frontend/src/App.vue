@@ -63,7 +63,7 @@
                   @click="goToMedia(item)"
                   :class="['flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors', highlightedIdx === idx ? 'bg-brand-500/10' : 'hover:bg-[var(--bg-hover)]']">
                   <div class="w-10 h-14 rounded overflow-hidden bg-[var(--bg-input)] shrink-0">
-                    <img v-if="item.poster_url" :src="item.poster_url" :alt="item.title" class="w-full h-full object-cover" />
+                    <img v-if="item.poster_url" :src="item.poster_url" :alt="item.title" class="w-full h-full object-cover" referrerpolicy="no-referrer" @error="(e) => { (e.target as HTMLImageElement).style.display = 'none' }" />
                     <div v-else class="w-full h-full flex items-center justify-center" style="color: var(--text-faint)">
                       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/></svg>
                     </div>
