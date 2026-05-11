@@ -41,13 +41,22 @@ class ApiConfig(TimestampMixin, Base):
     description: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     def get_masked_key(self) -> str:
-        """返回掩码后的 API Key"""
-        if not self.api_key or len(self.api_key) < 8:
+        """返回掩码后的 API Key（自动处理加密数据）"""
+        from .crypto import decrypt_secret, is_encrypted
+        
+        if not self.api_key:
             return "****"
-        return self.api_key[:4] + "****" + self.api_key[-4:]
+        
+        # 解密后再掩码
+        plain_key = decrypt_secret(self.api_key)
+        if not plain_key or len(plain_key) < 8:
+            return "****"
+        return plain_key[:4] + "****" + plain_key[-4:]
 
     def to_dict(self, include_key: bool = False) -> dict:
         """转换为字典"""
+        from .crypto import decrypt_secret, is_encrypted
+        
         result = {
             "id": self.id,
             "provider": self.provider,
@@ -67,7 +76,8 @@ class ApiConfig(TimestampMixin, Base):
         else:
             result["extra"] = None
         if include_key:
-            result["api_key"] = self.api_key
+            # 仅在显式请求时返回解密后的明文
+            result["api_key"] = decrypt_secret(self.api_key)
         return result
 
 

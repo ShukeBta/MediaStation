@@ -1,6 +1,9 @@
 """
 API 配置服务
 管理各数据源的 API Key 和配置
+
+安全增强：敏感字段（API Key、Passkey）使用 Fernet 加密存储，
+防止数据库泄露导致第三方凭据被盗用。
 """
 from __future__ import annotations
 
@@ -13,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions import NotFoundError
 from .api_config_models import ApiConfig, DEFAULT_PROVIDERS
+from .crypto import encrypt_secret, decrypt_secret
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +83,8 @@ class ApiConfigService:
             self.db.add(config)
         
         if api_key is not None:
-            config.api_key = api_key if api_key.strip() else None
+            plain_key = api_key if api_key.strip() else None
+            config.api_key = encrypt_secret(plain_key)
         if base_url is not None:
             config.base_url = base_url if base_url.strip() else None
         if enabled is not None:
@@ -138,9 +143,9 @@ class ApiConfigService:
             "extra": {},  # 额外配置（如 adult_dirs, javdb_cookie 等）
         }
         
-        # 优先使用数据库配置
+        # 优先使用数据库配置（解密敏感字段）
         if db_config and db_config.api_key:
-            result["api_key"] = db_config.api_key
+            result["api_key"] = decrypt_secret(db_config.api_key)
             result["base_url"] = db_config.base_url
             result["enabled"] = db_config.enabled
             result["source"] = "db"

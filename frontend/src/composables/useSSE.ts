@@ -1,5 +1,5 @@
 import { ref, onUnmounted } from 'vue'
-import { useAuthStore } from '@/stores/auth'
+import api from '@/api/client'
 
 export interface SSEEvent {
   type: string
@@ -17,18 +17,31 @@ export function useSSE() {
   const MAX_RECONNECT_ATTEMPTS = 10
   const BASE_RECONNECT_DELAY = 1000
 
-  function connect() {
+  async function connect() {
     if (eventSource) {
       eventSource.close()
     }
 
-    const auth = useAuthStore()
     const baseUrl = import.meta.env.VITE_API_URL || ''
-    // SSE URL 带上 token 作为查询参数（EventSource 不支持自定义 header）
-    const token = localStorage.getItem('access_token') || ''
-    const url = `${baseUrl}/api/system/events?token=${encodeURIComponent(token)}`
 
-    eventSource = new EventSource(url)
+    // ── SSE Ticket 机制：避免 JWT 出现在 URL 中被 Nginx 日志记录 ──
+    // 1. 通过标准 Authorization Header 请求一次性票据（10秒有效）
+    try {
+      const { data } = await api.get('/api/system/events/ticket', { timeout: 5000 })
+      const ticket = data.ticket
+      const url = `${baseUrl}/api/system/events?ticket=${encodeURIComponent(ticket)}`
+      eventSource = new EventSource(url)
+    } catch (err) {
+      // Ticket 请求失败时降级到 URL token 方式（兼容）
+      console.warn('[SSE] Ticket 获取失败，降级使用 token 参数:', err)
+      const token = localStorage.getItem('access_token') || ''
+      if (!token) {
+        error.value = '未登录，无法建立 SSE 连接'
+        return
+      }
+      const url = `${baseUrl}/api/system/events?token=${encodeURIComponent(token)}`
+      eventSource = new EventSource(url)
+    }
 
     eventSource.onopen = () => {
       connected.value = true
@@ -56,7 +69,12 @@ export function useSSE() {
 
       if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         reconnectAttempts++
-        const delay = BASE_RECONNECT_DELAY * Math.pow(1.5, reconnectAttempts - 1)
+        // 指数退避：1000ms, 1500ms, 2250ms, 3375ms...
+        const backoff = BASE_RECONNECT_DELAY * Math.pow(1.5, reconnectAttempts - 1)
+        // 添加 0~2000ms 随机抖动，防止惊群效应
+        const jitter = Math.random() * 2000
+        const delay = Math.min(backoff + jitter, 30000)  // 最大30秒
+        
         error.value = `连接断开，${Math.round(delay / 1000)}秒后重试... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`
         reconnectTimer = setTimeout(() => connect(), delay)
       } else {

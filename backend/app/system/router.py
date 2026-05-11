@@ -6,6 +6,9 @@ from __future__ import annotations
 import platform
 import shutil
 import time
+import uuid
+import logging
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -16,7 +19,24 @@ from app.deps import AdminUser, CurrentUser, DB
 from app.config import get_settings
 from app.system.events import event_generator, get_event_bus
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["system"])
+
+# ── SSE 一次性票据 (OTP) 缓存 ──
+# 票据有效期 10 秒，验证后立即作废，防止 Nginx 日志泄露 JWT
+_SSE_TICKETS: dict[str, dict] = {}
+_SSE_TICKET_TTL = 10  # 秒
+
+
+def _cleanup_expired_tickets():
+    """清理过期票据，防止内存缓慢增长"""
+    now = time.time()
+    expired = [t for t, info in _SSE_TICKETS.items() if now > info["exp"]]
+    for t in expired:
+        del _SSE_TICKETS[t]
+    if expired:
+        logger.debug(f"SSE Ticket: 清理了 {len(expired)} 个过期票据")
 
 # 记录启动时间
 _start_time = time.time()
@@ -88,36 +108,83 @@ async def system_status(user: CurrentUser):
     }
 
 
+@router.get("/system/events/ticket")
+async def generate_sse_ticket(user: CurrentUser):
+    """
+    生成 SSE 一次性票据 (OTP)
+    
+    前端通过标准 Authorization Header 请求此端点获取短期票据，
+    再用票据建立 SSE 连接，避免 JWT 出现在 URL 中被 Nginx 日志记录。
+    """
+    _cleanup_expired_tickets()
+    
+    ticket = str(uuid.uuid4())
+    _SSE_TICKETS[ticket] = {
+        "user_id": user.id,
+        "exp": time.time() + _SSE_TICKET_TTL,
+    }
+    return {"ticket": ticket}
+
+
 @router.get("/system/events")
-async def system_events(request: Request, token: str = None):
-    """SSE 实时事件流（支持从 query 参数传递 token）"""
-    from fastapi import status
-    from jose import JWTError, jwt
-    from app.config import get_settings
+async def system_events(request: Request, ticket: str | None = None):
+    """
+    SSE 实时事件流
+    
+    优先使用一次性票据认证（ticket 参数），
+    兼容旧版 Authorization Header / URL token 方式（将在未来版本移除）。
+    """
+    import asyncio
     from app.database import async_session_factory
     from app.user.models import User
     from sqlalchemy import select
     
-    # 如果没有 token query 参数，尝试从 header 获取
-    if not token:
+    user_id = None
+    
+    # 方式1: 一次性票据（推荐）
+    if ticket:
+        _cleanup_expired_tickets()
+        ticket_info = _SSE_TICKETS.pop(ticket, None)  # 验证后立即销毁 (OTP)
+        if ticket_info and time.time() <= ticket_info["exp"]:
+            user_id = ticket_info["user_id"]
+    
+    # 方式2: Authorization Header（兼容）
+    if user_id is None:
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header[7:]  # Remove "Bearer "
+            token_str = auth_header[7:]
+            try:
+                from jose import JWTError, jwt
+                settings = get_settings()
+                payload = jwt.decode(
+                    token_str, settings.app_secret_key,
+                    algorithms=["HS256"],
+                    options={"verify_signature": True, "verify_exp": True}
+                )
+                user_id = payload.get("sub")
+            except JWTError:
+                pass
     
-    if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    # 方式3: URL query token（兼容，但已不推荐）
+    if user_id is None:
+        token_str = request.query_params.get("token")
+        if token_str:
+            try:
+                from jose import JWTError, jwt
+                settings = get_settings()
+                payload = jwt.decode(
+                    token_str, settings.app_secret_key,
+                    algorithms=["HS256"],
+                    options={"verify_signature": True, "verify_exp": True}
+                )
+                user_id = payload.get("sub")
+            except JWTError:
+                pass
     
-    # 验证 token
-    settings = get_settings()
-    try:
-        payload = jwt.decode(token, settings.app_secret_key, algorithms=["HS256"])
-        user_id = payload.get("sub")
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
     
-    # 获取用户并验证
+    # 验证用户存在且活跃
     async with async_session_factory() as db:
         result = await db.execute(select(User).where(User.id == int(user_id)))
         user = result.scalar_one_or_none()
