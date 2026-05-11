@@ -327,9 +327,19 @@ function formatTime(ts?: string): string {
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
-// ── Markdown 简易渲染 ──
+// ── Markdown 简易渲染（带 XSS 转义）──
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function renderMarkdown(text: string): string {
-  return text
+  // 先转义 HTML 特殊字符，再应用 Markdown 语法标记
+  return escapeHtml(text)
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/`(.+?)`/g, '<code class="bg-gray-500/20 px-1 rounded text-xs">$1</code>')
