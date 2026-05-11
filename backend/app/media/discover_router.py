@@ -282,7 +282,7 @@ async def _fetch_tmdb_section(section_key: str, tmdb_config: dict) -> dict:
             resp = await client.client.get("/trending/all/day", params={"language": "zh-CN"})
             data = safe_json(resp, url_hint="tmdb_trending")
             if not data:
-                continue
+                return {"items": items}
             raw = data.get("results", [])[:12]
             for r in raw:
                 mt = r.get("media_type", "")
@@ -310,7 +310,7 @@ async def _fetch_tmdb_section(section_key: str, tmdb_config: dict) -> dict:
             resp = await client.client.get("/movie/now_playing", params={"language": "zh-CN"})
             data = safe_json(resp, url_hint="tmdb_now_playing")
             if not data:
-                continue
+                return {"items": items}
             raw = data.get("results", [])[:20]
             for r in raw:
                 poster = r.get("poster_path")
@@ -333,7 +333,7 @@ async def _fetch_tmdb_section(section_key: str, tmdb_config: dict) -> dict:
             resp = await client.client.get("/movie/popular", params={"language": "zh-CN"})
             data = safe_json(resp, url_hint="tmdb_popular_movies")
             if not data:
-                continue
+                return {"items": items}
             raw = data.get("results", [])[:12]
             for r in raw:
                 poster = r.get("poster_path")
@@ -355,7 +355,7 @@ async def _fetch_tmdb_section(section_key: str, tmdb_config: dict) -> dict:
             resp = await client.client.get("/tv/popular", params={"language": "zh-CN"})
             data = safe_json(resp, url_hint="tmdb_popular_tv")
             if not data:
-                continue
+                return {"items": items}
             raw = data.get("results", [])[:12]
             for r in raw:
                 poster = r.get("poster_path")
@@ -451,7 +451,7 @@ async def _fetch_douban_section(section_key: str) -> dict:
                 data = safe_json(resp, url_hint="douban_top250")
                 if data:
                     for idx, s in enumerate(data.get("subjects", [])):
-                    items.append({
+                        items.append({
                         "id": f"douban_top250_{s.get('id', '')}",
                         "douban_id": s.get("id"),
                         "rank": idx + 1,
@@ -484,33 +484,33 @@ async def _fetch_bangumi_section(section_key: str) -> dict:
                 data = safe_json(resp, url_hint="bangumi_calendar")
                 if data:
                     for week_entry in data:
-                    weekday_items = week_entry.get("items", [])
-                    for item in weekday_items[:5]:  # 每天最多取 5 部
-                        meta = item.get("metadata", {}) or {}
-                        bgm_id = meta.get("subject_id") or item.get("id", "")
-                        images = meta.get("images", {}) or {}
-                        rating_data = meta.get("rating", {}) or {}
-                        name_cn = meta.get("name_cn") or ""
-                        name = meta.get("name") or ""
+                        weekday_items = week_entry.get("items", [])
+                        for item in weekday_items[:5]:  # 每天最多取 5 部
+                            meta = item.get("metadata", {}) or {}
+                            bgm_id = meta.get("subject_id") or item.get("id", "")
+                            images = meta.get("images", {}) or {}
+                            rating_data = meta.get("rating", {}) or {}
+                            name_cn = meta.get("name_cn") or ""
+                            name = meta.get("name") or ""
 
-                        items.append({
-                            "id": f"bgm_{bgm_id}",
-                            "bangumi_id": bgm_id,
-                            "title": name_cn or name,
-                            "original_title": name if name_cn else "",
-                            "poster_url": (
-                                images.get("large")
-                                or images.get("common")
-                                or images.get("small")
-                                or None
-                            ),
-                            "rating": rating_data.get("score", 0) if isinstance(rating_data, dict) else 0,
-                            "media_type": "anime",
-                            "weekday": week_entry.get("weekday", {}).get("cn", ""),
-                            "air_time": meta.get("air_time", ""),
-                            "source": "bangumi",
-                            "external": True,
-                        })
+                            items.append({
+                                "id": f"bgm_{bgm_id}",
+                                "bangumi_id": bgm_id,
+                                "title": name_cn or name,
+                                "original_title": name if name_cn else "",
+                                "poster_url": (
+                                    images.get("large")
+                                    or images.get("common")
+                                    or images.get("small")
+                                    or None
+                                ),
+                                "rating": rating_data.get("score", 0) if isinstance(rating_data, dict) else 0,
+                                "media_type": "anime",
+                                "weekday": week_entry.get("weekday", {}).get("cn", ""),
+                                "air_time": meta.get("air_time", ""),
+                                "source": "bangumi",
+                                "external": True,
+                            })
     except Exception as e:
         logger.warning(f"Bangumi fetch failed for {section_key}: {e}")
 

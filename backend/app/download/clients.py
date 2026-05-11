@@ -1201,23 +1201,38 @@ class Aria2Adapter(DownloadClientAdapter):
                 return gid
 
             else:
-                # 本地种子文件路径
+                # 本地种子文件路径 - 严格路径校验防止任意文件读取（Issue #17 修复）
+                from pathlib import Path
+                from app.config import get_settings
+                
+                file_path = Path(url).resolve()
+                settings = get_settings()
+                safe_upload_dir = Path(settings.data_dir) / "tmp_uploads"
+                safe_upload_dir.mkdir(parents=True, exist_ok=True)
+                
+                # 验证路径在安全的上传目录内
+                try:
+                    file_path.relative_to(safe_upload_dir.resolve())
+                except ValueError:
+                    raise ValueError(f"安全警告：非法的种子文件路径！路径必须在 {safe_upload_dir} 内")
+                
+                logger.info(f"读取本地种子文件：{file_path}")
                 import base64
-                with open(url, "rb") as f:
+                with open(file_path, "rb") as f:
                     torrent_b64 = base64.b64encode(f.read()).decode()
 
-                options = {}
-                if save_path:
-                    # ── Issue #54 修复：路径安全校验 ──
-                    from app.config import get_settings
-                    settings = get_settings()
-                    safe_path = validate_download_path(save_path, settings.download_dir)
-                    options["dir"] = safe_path
+                    options = {}
+                    if save_path:
+                        # ── Issue #54 修复：路径安全校验 ──
+                        from app.config import get_settings
+                        settings = get_settings()
+                        safe_path = validate_download_path(save_path, settings.download_dir)
+                        options["dir"] = safe_path
 
-                result = await self._call("addTorrent", [torrent_b64, [], options])
-                gid = result.get("result", "")
-                logger.info(f"Aria2 added torrent file => GID={gid}")
-                return gid
+                    result = await self._call("addTorrent", [torrent_b64, [], options])
+                    gid = result.get("result", "")
+                    logger.info(f"Aria2 added torrent file => GID={gid}")
+                    return gid
 
         except Exception as e:
             logger.error(f"Aria2 add_torrent failed: {e}")
