@@ -21,6 +21,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from app.common import safe_create_task
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -335,7 +336,7 @@ class Transcoder:
             # 关键：先在锁内注册到活跃任务表（占位）
             self._active_jobs[job_key] = job
 
-        # 锁释放后，再异步启动转码（避免在锁内执行耗时操作）
+        # 锁释放后，再异步启动转码（使用安全包装器，防止异常静默崩溃）
         # 预获取视频时长用于进度计算
         loop = asyncio.get_event_loop()
         try:
@@ -343,7 +344,10 @@ class Transcoder:
         except Exception:
             pass
 
-        asyncio.create_task(self._run_transcode(job, hw_accel))
+        safe_create_task(
+            self._run_transcode(job, hw_accel),
+            name=f"transcode_job_{job.id}"
+        )
         hw_name = hw_accel.value.upper()
         logger.info(f"[Transcoder] Job {job_key} started: {quality}, HW={hw_name}")
         return {"mode": "hls", "playlist_url": playlist_url, "status": "started"}
@@ -403,6 +407,13 @@ class Transcoder:
                 logger.error(f"Transcode job {job.id} failed: {job.error}")
 
         except asyncio.CancelledError:
+            # 必须终止子进程，否则 ffmpeg 会变成僵尸进程
+            if process.returncode is None:
+                try:
+                    process.kill()
+                    await process.wait()
+                except (ProcessLookupError, OSError):
+                    pass
             job.status = "cancelled"
             logger.info(f"Transcode job {job.id} cancelled")
         except Exception as e:

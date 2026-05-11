@@ -13,6 +13,7 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -242,17 +243,19 @@ class SubtitleService:
                 file_path,
             ]
 
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+            def _run():
+                return subprocess.run(cmd, capture_output=True, timeout=30)
 
-            if proc.returncode != 0:
+            try:
+                result = await asyncio.to_thread(_run)
+            except subprocess.TimeoutExpired:
+                logger.warning(f"ffprobe subtitle probe timeout for {file_path}")
                 return []
 
-            data = json.loads(stdout.decode("utf-8", errors="replace"))
+            if result.returncode != 0:
+                return []
+
+            data = json.loads(result.stdout.decode("utf-8", errors="replace"))
             streams = data.get("streams", [])
 
             result = []
@@ -309,15 +312,17 @@ class SubtitleService:
                 "-y",
             ]
 
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+            def _run_extract():
+                return subprocess.run(cmd, capture_output=True, timeout=60)
 
-            if proc.returncode != 0:
-                logger.warning(f"Subtitle extraction failed: {stderr.decode()[:200]}")
+            try:
+                result = await asyncio.to_thread(_run_extract)
+            except subprocess.TimeoutExpired:
+                logger.warning(f"Subtitle extraction timeout for {file_path}")
+                return None
+
+            if result.returncode != 0:
+                logger.warning(f"Subtitle extraction failed: {result.stderr.decode()[:200]}")
                 return None
 
             return str(output_path)

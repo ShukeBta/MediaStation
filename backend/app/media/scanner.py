@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -1138,7 +1139,12 @@ class MediaScanner:
         return subtitles
 
     async def _ffprobe(self, file_path: Path) -> dict | None:
-        """使用 ffprobe 获取完整视频信息"""
+        """使用 ffprobe 获取完整视频信息。
+
+        使用 subprocess.run 在线程池中执行，避免 asyncio.create_subprocess_exec + PIPE
+        的潜在死锁风险（大输出缓冲区可阻塞事件循环）。
+        subprocess.run 的 timeout 参数保证超时后进程被正确终止，无僵尸进程。
+        """
         try:
             cmd = [
                 self.ffprobe_path,
@@ -1148,27 +1154,25 @@ class MediaScanner:
                 "-show_streams",
                 str(file_path),
             ]
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
+
+            def _run_ffprobe() -> subprocess.CompletedProcess:
+                return subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    timeout=30,
+                    text=False,
+                )
+
             try:
-                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
-            except asyncio.TimeoutError:
-                # 超时时必须杀死子进程，防止僵尸进程
-                logger.error(f"ffprobe timeout for {file_path}, killing process...")
-                try:
-                    proc.kill()
-                    await proc.wait()  # 必须 wait 以回收僵尸进程
-                except ProcessLookupError:
-                    pass
-                return None
-            
-            if proc.returncode != 0:
+                proc_result = await asyncio.to_thread(_run_ffprobe)
+            except subprocess.TimeoutExpired:
+                logger.error(f"ffprobe timeout for {file_path}, subprocess.run already killed it")
                 return None
 
-            data = json.loads(stdout.decode("utf-8", errors="ignore"))
+            if proc_result.returncode != 0:
+                return None
+
+            data = json.loads(proc_result.stdout.decode("utf-8", errors="ignore"))
             result = {}
 
             # 格式信息
