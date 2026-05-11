@@ -376,8 +376,9 @@ async function handleDelete(task: any) {
     setTimeout(() => {
       loadTasks()
     }, 400)
-  } catch (e) {
-    toast.error('删除下载任务失败')
+  } catch (e: any) {
+    const detail = e?.response?.data?.detail || e?.response?.data?.message || e?.message || '未知错误'
+    toast.error(`删除下载任务失败：${detail}`)
   }
 }
 
