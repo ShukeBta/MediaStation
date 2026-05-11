@@ -3,8 +3,11 @@
 """
 from __future__ import annotations
 
+import asyncio
+import logging
 from fastapi import APIRouter, Depends, Query
 
+from app.common import safe_create_task
 from app.deps import AdminUser, CurrentUser, DB
 from app.download.service import DownloadService
 from app.download.schemas import (
@@ -129,8 +132,8 @@ async def start_auto_sync(user: CurrentUser):
                 logger.error(f"Auto sync error: {e}")
             await asyncio.sleep(5)
 
-    # 在后台启动自动同步任务
-    _auto_sync_task = asyncio.create_task(_auto_sync_loop())
+    # 在后台启动自动同步任务（使用安全包装器，防止异常静默崩溃）
+    _auto_sync_task = safe_create_task(_auto_sync_loop(), name="auto_sync_loop")
     return {"ok": True, "message": "已启动自动进度同步（每5秒）"}
 
 

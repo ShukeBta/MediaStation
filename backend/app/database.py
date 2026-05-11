@@ -64,9 +64,23 @@ def get_engine() -> AsyncEngine:
 
 
 def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    """获取 session factory，如果未初始化则自动初始化"""
     global async_session_factory
+    
+    # 如果未初始化，先初始化 engine 和 session factory
     if async_session_factory is None:
         get_engine()
+    
+    # 双重检查：如果还是 None，直接创建
+    if async_session_factory is None:
+        from app.config import get_settings
+        settings = get_settings()
+        engine = _build_engine()
+        async_session_factory = async_sessionmaker(
+            engine, class_=AsyncSession, expire_on_commit=False
+        )
+        logger.warning("async_session_factory was None, created directly in get_session_factory()")
+    
     return async_session_factory
 
 
@@ -136,10 +150,12 @@ async def _create_pg_indexes(eng: AsyncEngine):
 
 
 async def close_db():
-    global engine
+    global engine, async_session_factory
     if engine is None:
         return
     await engine.dispose()
     engine = None
+    async_session_factory = None
+    logger.info("Database connection closed")
     async_session_factory = None
     logger.info("Database connection closed")

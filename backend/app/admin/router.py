@@ -1455,3 +1455,128 @@ async def assistant_undo(op_id: str, user: AdminUser):
 
     op["status"] = "undone"
     return SuccessResponse.ok({"message": "操作已撤销", "op_id": op_id})
+
+
+# ── 数据库备份管理 ──
+
+@router.post("/system/backup", summary="创建数据库备份")
+async def create_backup(user: AdminUser):
+    """
+    创建数据库热备份（使用 SQLite 原生 backup API，确保事务一致性）
+    """
+    from app.config import get_settings
+    from app.admin.backup_service import create_database_backup
+    
+    settings = get_settings()
+    
+    # 获取数据库路径
+    db_url = settings.database_url
+    if not db_url.startswith("sqlite"):
+        return ErrorResponse(message="仅支持 SQLite 数据库的备份")
+    
+    # 解析数据库文件路径
+    if "sqlite+aiosqlite:///" in db_url:
+        db_path = db_url.replace("sqlite+aiosqlite:///", "")
+    elif "sqlite:///" in db_url:
+        db_path = db_url.replace("sqlite:///", "")
+    else:
+        return ErrorResponse(message="无法解析数据库路径")
+    
+    # 备份目录
+    backup_dir = os.path.join(settings.data_dir, "backups")
+    
+    try:
+        backup_file = await create_database_backup(db_path, backup_dir)
+        return SuccessResponse.ok({
+            "message": "备份创建成功",
+            "backup_file": os.path.basename(backup_file),
+            "path": backup_file,
+        })
+    except Exception as e:
+        logger.error(f"Backup failed: {e}")
+        return ErrorResponse(message=f"备份失败: {str(e)}")
+
+
+@router.get("/system/backups", summary="列出所有备份")
+async def list_backups(user: AdminUser):
+    """列出所有可用的数据库备份文件"""
+    from app.config import get_settings
+    from app.admin.backup_service import list_backups
+    
+    settings = get_settings()
+    backup_dir = os.path.join(settings.data_dir, "backups")
+    
+    try:
+        backups = await list_backups(backup_dir)
+        return SuccessResponse.ok({"backups": backups})
+    except Exception as e:
+        logger.error(f"List backups failed: {e}")
+        return ErrorResponse(message=f"获取备份列表失败: {str(e)}")
+
+
+@router.post("/system/backup/restore", summary="从备份恢复数据库")
+async def restore_backup(
+    user: AdminUser,
+    backup_filename: str = Body(..., embed=True),
+):
+    """
+    从指定的备份文件恢复数据库
+    注意：恢复操作会重启应用以重新连接数据库
+    """
+    from app.config import get_settings
+    from app.admin.backup_service import restore_database
+    
+    settings = get_settings()
+    backup_dir = os.path.join(settings.data_dir, "backups")
+    backup_path = os.path.join(backup_dir, backup_filename)
+    
+    # 安全校验：防止路径遍历攻击
+    if not os.path.realpath(backup_path).startswith(os.path.realpath(backup_dir)):
+        return ErrorResponse(message="非法的文件路径")
+    
+    # 解析数据库文件路径
+    db_url = settings.database_url
+    if "sqlite+aiosqlite:///" in db_url:
+        db_path = db_url.replace("sqlite+aiosqlite:///", "")
+    elif "sqlite:///" in db_url:
+        db_path = db_url.replace("sqlite:///", "")
+    else:
+        return ErrorResponse(message="仅支持 SQLite 数据库的恢复")
+    
+    try:
+        success = await restore_database(backup_path, db_path)
+        if success:
+            return SuccessResponse.ok({
+                "message": "数据库恢复成功，请重启应用以生效",
+                "backup_file": backup_filename,
+            })
+        else:
+            return ErrorResponse(message="数据库恢复失败")
+    except Exception as e:
+        logger.error(f"Restore failed: {e}")
+        return ErrorResponse(message=f"恢复失败: {str(e)}")
+
+
+@router.delete("/system/backup/{backup_filename}", summary="删除备份文件")
+async def delete_backup(backup_filename: str, user: AdminUser):
+    """删除指定的备份文件"""
+    from app.config import get_settings
+    from app.admin.backup_service import delete_backup
+    
+    settings = get_settings()
+    backup_dir = os.path.join(settings.data_dir, "backups")
+    backup_path = os.path.join(backup_dir, backup_filename)
+    
+    # 安全校验：防止路径遍历攻击
+    if not os.path.realpath(backup_path).startswith(os.path.realpath(backup_dir)):
+        return ErrorResponse(message="非法的文件路径")
+    
+    try:
+        success = await delete_backup(backup_path)
+        if success:
+            return SuccessResponse.ok({"message": "备份删除成功"})
+        else:
+            return ErrorResponse(message="备份文件不存在")
+    except Exception as e:
+        logger.error(f"Delete backup failed: {e}")
+        return ErrorResponse(message=f"删除失败: {str(e)}")

@@ -61,7 +61,7 @@ async def get_emby_current_user(
     credentials_exception = HTTPException(401, "Invalid authentication")
     
     try:
-        payload = jwt.decode(token, settings.app_secret_key, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.app_secret_key, algorithms=[ALGORITHM], options={"verify_signature": True, "verify_exp": True})
         user_id: str | None = payload.get("sub")
         if user_id is None:
             raise credentials_exception

@@ -4,9 +4,10 @@
 import logging
 from datetime import datetime, timedelta
 from typing import Any
+from contextlib import asynccontextmanager
 
 from sqlalchemy import select, func, and_, desc
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker as _async_sessionmaker
 
 from app.stats.schemas import (
     OverviewStats,
@@ -23,7 +24,7 @@ from app.stats.schemas import (
     UserStatsResponse,
     PlayRecordCreate,
 )
-from app.database import async_session_factory
+from app.database import get_engine
 from app.media.repository import MediaRepository
 from app.user.models import User
 from app.playback.models import PlayHistory
@@ -32,12 +33,32 @@ from app.media.models import MediaItem
 logger = logging.getLogger(__name__)
 
 
+def _get_session_factory():
+    """获取或创建 session factory"""
+    global _local_session_factory
+    if _local_session_factory is None:
+        engine = get_engine()
+        _local_session_factory = _async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    return _local_session_factory
+
+# 模块级 session factory 缓存
+_local_session_factory = None
+
+
+@asynccontextmanager
+async def get_db_session():
+    """获取数据库 session"""
+    factory = _get_session_factory()
+    async with factory() as session:
+        yield session
+
+
 class StatsService:
     """数据统计服务"""
 
     async def get_overview(self) -> OverviewStats:
         """获取概览统计"""
-        async with async_session_factory() as db:
+        async with get_db_session() as db:
             # 媒体统计
             repo = MediaRepository(db)
             media_stats = await repo.get_stats()
@@ -85,7 +106,7 @@ class StatsService:
 
     async def get_play_trend(self, period: str = "7d") -> PlayTrend:
         """获取播放趋势"""
-        async with async_session_factory() as db:
+        async with get_db_session() as db:
             now = datetime.now()
             
             # 按小时统计（最近24小时）
@@ -129,7 +150,7 @@ class StatsService:
 
     async def get_top_content(self, period: str = "7d", limit: int = 10) -> TopContentResponse:
         """获取热门内容"""
-        async with async_session_factory() as db:
+        async with get_db_session() as db:
             # 计算时间范围
             now = datetime.now()
             if period == "1d":
@@ -176,7 +197,7 @@ class StatsService:
 
     async def get_top_users(self, period: str = "7d", limit: int = 10) -> TopUsersResponse:
         """获取活跃用户"""
-        async with async_session_factory() as db:
+        async with get_db_session() as db:
             now = datetime.now()
             if period == "1d":
                 start_time = now - timedelta(days=1)
@@ -223,7 +244,7 @@ class StatsService:
         """获取媒体库统计"""
         from app.media.models import MediaLibrary
         
-        async with async_session_factory() as db:
+        async with get_db_session() as db:
             # 获取所有媒体库
             result = await db.execute(select(MediaLibrary))
             libraries = result.scalars().all()
@@ -318,7 +339,7 @@ class StatsService:
         """获取用户统计"""
         from app.media.models import MediaItem
         
-        async with async_session_factory() as db:
+        async with get_db_session() as db:
             user = await db.get(User, user_id)
             if not user:
                 raise ValueError("User not found")
@@ -361,7 +382,7 @@ class StatsService:
 
     async def record_play(self, user_id: int, data: PlayRecordCreate) -> dict:
         """记录播放"""
-        async with async_session_factory() as db:
+        async with get_db_session() as db:
             record = PlayHistory(
                 user_id=user_id,
                 media_item_id=data.media_id,

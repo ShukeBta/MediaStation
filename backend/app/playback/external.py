@@ -108,7 +108,7 @@ async def external_stream(
 
     # 验证令牌
     try:
-        payload = jwt.decode(token, settings.app_secret_key, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.app_secret_key, algorithms=[ALGORITHM], options={"verify_signature": True, "verify_exp": True})
         if payload.get("type") != "external_play":
             raise HTTPException(status_code=403, detail="Invalid token type")
         if payload.get("media_id") != media_id:

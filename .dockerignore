@@ -81,9 +81,16 @@ Thumbs.db
 *-backup/
 nul
 
-# 测试
+# 测试文件和敏感数据
 tests/
 test/
+test_*.py
+*_test.py
+*test*.py
+cookies.txt
+**/reset_report.txt
+scripts/test_*.py
+scripts/*test*.py
 *.test.js
 *.spec.js
 

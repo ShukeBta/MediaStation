@@ -4,11 +4,12 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, Response
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -99,7 +100,7 @@ async def _get_user_from_token(token: str, db: AsyncSession):
     settings = get_settings()
     credentials_exception = HTTPException(status_code=401, detail="Could not validate credentials")
     try:
-        payload = jwt.decode(token, settings.app_secret_key, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.app_secret_key, algorithms=[ALGORITHM], options={"verify_signature": True, "verify_exp": True})
         user_id: str | None = payload.get("sub")
         if user_id is None:
             raise credentials_exception
@@ -125,12 +126,72 @@ async def get_play_info(
     return await service.get_play_info(media_id, episode_id, quality, user_id=user.id)
 
 
+
+def range_requests_response(
+    request: Request, file_path: str, content_type: str
+) -> StreamingResponse | FileResponse:
+    """处理 HTTP Range 请求，返回 206 Partial Content 或完整文件
+    
+    防止内存溢出：限制单次读取块大小（最大 2MB）
+    """
+    path = Path(file_path)
+    file_size = path.stat().st_size
+    range_header = request.headers.get("range")
+
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Encoding": "identity",
+        "Content-Length": str(file_size),
+        "Access-Control-Expose-Headers": (
+            "Accept-Ranges, Content-Encoding, Content-Length, Content-Range"
+        ),
+    }
+
+    if range_header is None:
+        return FileResponse(
+            path,
+            media_type=content_type,
+            headers=headers,
+        )
+
+    # 安全地解析 Range 请求，避免用户恶意传入极大值导致内存崩溃
+    try:
+        byte_range = range_header.strip().split("=")[1]
+        start_str, end_str = byte_range.split("-")
+        start = int(start_str)
+        end = int(end_str) if end_str else file_size - 1
+    except ValueError:
+        return Response(status_code=416, headers=headers)  # Requested Range Not Satisfiable
+
+    if start >= file_size or end >= file_size or start > end:
+        return Response(status_code=416, headers=headers)
+
+    # 限制单次读取的 Chunk 大小 (例如最大只加载 2MB，防止并发引发 OOM)
+    chunk_size = min(end - start + 1, 2 * 1024 * 1024)
+    end = start + chunk_size - 1
+
+    headers["Content-Length"] = str(chunk_size)
+    headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+
+    def file_iterator(path, offset, bytes_to_read):
+        with open(path, "rb") as f:
+            f.seek(offset, 0)  # 0 = os.SEEK_SET
+            yield f.read(bytes_to_read)
+
+    return StreamingResponse(
+        file_iterator(file_path, start, chunk_size),
+        headers=headers,
+        status_code=206,
+        media_type=content_type,
+    )
+
+
 @router.get("/{media_id}/stream")
 async def stream_video(
     media_id: int,
+    request: Request,
     db: DB,
     episode_id: int | None = None,
-    range: str | None = Header(None),
     token: str | None = Query(None),
     authorization: str | None = Header(None),
 ):
@@ -172,46 +233,8 @@ async def stream_video(
     }
     mime_type = _mime_map.get(path.suffix.lower(), "video/mp4")
 
-    if range:
-        # 解析 Range: bytes=start-end
-        range_parts = range.replace("bytes=", "").split("-")
-        start = int(range_parts[0]) if range_parts[0] else 0
-        end = int(range_parts[1]) if len(range_parts) > 1 and range_parts[1] else file_size - 1
-        end = min(end, file_size - 1)
-
-        async def file_range_sender():
-            with open(path, "rb") as f:
-                f.seek(start)
-                remaining = end - start + 1
-                chunk_size = 64 * 1024  # 64KB chunks
-                while remaining > 0:
-                    chunk = f.read(min(chunk_size, remaining))
-                    if not chunk:
-                        break
-                    remaining -= len(chunk)
-                    yield chunk
-
-        return StreamingResponse(
-            file_range_sender(),
-            status_code=206,
-            media_type=mime_type,
-            headers={
-                "Content-Range": f"bytes {start}-{end}/{file_size}",
-                "Accept-Ranges": "bytes",
-                "Content-Length": str(end - start + 1),
-                "Cache-Control": "public, max-age=86400",
-            },
-        )
-
-    return FileResponse(
-        path,
-        media_type=mime_type,
-        headers={
-            "Accept-Ranges": "bytes",
-            "Content-Length": str(file_size),
-            "Cache-Control": "public, max-age=86400",
-        },
-    )
+    # 使用 range_requests_response 处理（安全的 Range 请求）
+    return range_requests_response(request, file_path, mime_type)
 
 
 @router.get("/{media_id}/external-url")

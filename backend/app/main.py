@@ -179,8 +179,6 @@ async def global_error_handler(request: Request, exc: Exception):
     if isinstance(exc, RequestValidationError):
         return JSONResponse(status_code=422, content={"detail": exc.errors()})
     
-    import traceback
-    error_detail = traceback.format_exc()
     logger.error(f"Unhandled error: {exc}", exc_info=True)
     # 生产环境：返回通用错误信息
     return JSONResponse(
@@ -207,6 +205,7 @@ from app.playlist.router import router as playlist_router
 from app.strm.router import router as strm_router
 from app.dlna import router as dlna_router
 from app.license.router import router as license_router
+from app.media.image_proxy import router as image_proxy_router
 
 API_PREFIX = "/api"
 
@@ -227,6 +226,7 @@ app.include_router(playlist_router, prefix=API_PREFIX)
 app.include_router(strm_router, prefix=API_PREFIX)
 app.include_router(dlna_router, prefix=API_PREFIX)
 app.include_router(license_router, prefix=API_PREFIX)
+app.include_router(image_proxy_router, prefix=API_PREFIX)
 
 
 # ── 静态文件（前端构建产物） ──

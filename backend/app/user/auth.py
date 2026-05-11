@@ -49,4 +49,9 @@ def create_refresh_token(user_id: int) -> str:
 
 def decode_token(token: str) -> dict:
     settings = get_settings()
-    return jwt.decode(token, settings.app_secret_key, algorithms=[ALGORITHM])
+    return jwt.decode(
+        token,
+        settings.app_secret_key,
+        algorithms=[ALGORITHM],
+        options={"verify_signature": True, "verify_exp": True}
+    )

@@ -54,7 +54,8 @@ async def get_current_user(
     )
     try:
         payload = jwt.decode(
-            token, settings.app_secret_key, algorithms=[ALGORITHM]
+            token, settings.app_secret_key, algorithms=[ALGORITHM],
+            options={"verify_signature": True, "verify_exp": True}
         )
         user_id: str | None = payload.get("sub")
         token_type: str | None = payload.get("type")

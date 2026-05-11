@@ -23,6 +23,7 @@ from watchdog.events import (
 )
 from watchdog.observers import Observer
 
+from app.common import safe_create_task
 from app.media.scanner import VIDEO_EXTENSIONS, SUBTITLE_EXTENSIONS
 
 logger = logging.getLogger(__name__)
@@ -76,7 +77,11 @@ class MediaWatchHandler(FileSystemEventHandler):
 
     def _schedule_event(self, path: str, event_type: str):
         """调度事件处理（带去重）"""
-        asyncio.create_task(self._process_event(path, event_type))
+        # 使用安全包装器，防止事件处理异常静默崩溃
+        safe_create_task(
+            self._process_event(path, event_type),
+            name=f"watcher_event_{event_type}"
+        )
 
     async def _process_event(self, path: str, event_type: str):
         """处理文件变化事件"""

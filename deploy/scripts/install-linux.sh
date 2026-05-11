@@ -124,9 +124,34 @@ create_directories() {
     sudo mkdir -p "$DATA_DIR/media/anime"
     sudo mkdir -p "$DATA_DIR/downloads"
     sudo mkdir -p "$DATA_DIR/logs"
+    sudo mkdir -p "$DATA_DIR/backups"
+    sudo mkdir -p "$DATA_DIR/metadata/images"
 
-    sudo chown -R $USER:$USER "$INSTALL_DIR" 2>/dev/null || true
-    sudo chown -R $USER:$USER "$DATA_DIR"
+    # 使用 SUDO_UID 和 SUDO_GID 设置正确的所有者
+    # 如果通过 sudo 运行，使用 SUDO_USER 的 UID/GID
+    # 否则使用当前用户的 UID/GID
+    if [ -n "$SUDO_USER" ]; then
+        TARGET_USER=$SUDO_USER
+    else
+        TARGET_USER=$USER
+    fi
+
+    # 获取用户的 UID 和 GID
+    TARGET_UID=$(id -u $TARGET_USER)
+    TARGET_GID=$(id -g $TARGET_USER)
+
+    # 设置所有者为当前用户
+    sudo chown -R $TARGET_USER:$TARGET_USER "$INSTALL_DIR" 2>/dev/null || true
+    sudo chown -R $TARGET_UID:$TARGET_GID "$DATA_DIR"
+
+    # 设置合理的权限（755 目录，644 文件）
+    # 禁止 777 权限（安全风险）
+    sudo find "$DATA_DIR" -type d -exec chmod 755 {} \;
+    sudo find "$INSTALL_DIR" -type d -exec chmod 755 {} \;
+
+    # 数据库文件需要读写权限
+    sudo chmod 644 "$DATA_DIR"/*.db 2>/dev/null || true
+    sudo chmod 600 "$DATA_DIR"/*.db 2>/dev/null || true  # 更严格的权限
 
     log_success "目录创建完成"
 }
