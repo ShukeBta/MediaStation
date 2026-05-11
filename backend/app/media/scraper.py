@@ -12,6 +12,7 @@ from typing import Any
 import httpx
 
 from app.config import get_settings
+from app.common.utils import safe_json
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +72,8 @@ class TMDbClient:
         try:
             resp = await self.client.get("/search/movie", params=params)
             resp.raise_for_status()
-            return resp.json().get("results", [])
+            data = safe_json(resp, url_hint="tmdb_search_movie")
+            return data.get("results", []) if data else []
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 500:
                 logger.error(f"[TMDb] Server error (500) when searching movies: {e}")
@@ -89,7 +91,8 @@ class TMDbClient:
         try:
             resp = await self.client.get("/search/tv", params=params)
             resp.raise_for_status()
-            return resp.json().get("results", [])
+            data = safe_json(resp, url_hint="tmdb_search_tv")
+            return data.get("results", []) if data else []
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 500:
                 logger.error(f"[TMDb] Server error (500) when searching TV shows: {e}")
@@ -120,7 +123,9 @@ class TMDbClient:
             params = {"api_key": self.api_key, "language": "en"}
             resp = await self.client.get(endpoint, params=params)
             resp.raise_for_status()
-            data = resp.json()
+            data = safe_json(resp, url_hint=f"tmdb_english_title:{tmdb_id}")
+            if not data:
+                return None
             # 对于电影，使用 original_title；对于剧集，使用 original_name
             english_title = data.get("original_title") or data.get("original_name")
             logger.debug(f"[TMDb] 获取英文标题 TMDB {tmdb_id}: {english_title}")
@@ -134,7 +139,14 @@ class TMDbClient:
         try:
             resp = await self.client.get(f"/movie/{tmdb_id}")
             resp.raise_for_status()
-            return resp.json()
+            result = safe_json(resp, url_hint=f"tmdb_movie_detail:{tmdb_id}")
+            if not result:
+                raise httpx.HTTPStatusError(
+                    "TMDb 返回数据无法解析",
+                    request=resp.request,
+                    response=resp,
+                )
+            return result
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 500:
                 logger.error(f"[TMDb] Server error (500) when getting movie {tmdb_id}: {e}")
@@ -149,7 +161,14 @@ class TMDbClient:
         try:
             resp = await self.client.get(f"/tv/{tmdb_id}")
             resp.raise_for_status()
-            return resp.json()
+            result = safe_json(resp, url_hint=f"tmdb_tv_detail:{tmdb_id}")
+            if not result:
+                raise httpx.HTTPStatusError(
+                    "TMDb 返回数据无法解析",
+                    request=resp.request,
+                    response=resp,
+                )
+            return result
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 500:
                 logger.error(f"[TMDb] Server error (500) when getting TV show {tmdb_id}: {e}")
@@ -164,7 +183,14 @@ class TMDbClient:
         try:
             resp = await self.client.get(f"/tv/{tmdb_id}/season/{season_number}")
             resp.raise_for_status()
-            return resp.json()
+            result = safe_json(resp, url_hint=f"tmdb_season:{tmdb_id}_s{season_number}")
+            if not result:
+                raise httpx.HTTPStatusError(
+                    "TMDb 返回数据无法解析",
+                    request=resp.request,
+                    response=resp,
+                )
+            return result
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 500:
                 logger.error(f"[TMDb] Server error (500) when getting season {season_number} of TV {tmdb_id}: {e}")

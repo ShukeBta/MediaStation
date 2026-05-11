@@ -9,6 +9,7 @@ from typing import Any
 
 from app.config import Settings, get_settings
 from app.media.providers.base import MediaMetadata, MetadataProvider, ProviderPriority
+from app.common.utils import safe_json
 
 logger = logging.getLogger(__name__)
 
@@ -251,19 +252,20 @@ class TMDbClient:
         endpoint = "/search/movie" if media_type == "movie" else "/search/tv"
         resp = await self.client.get(endpoint, params=params)
         resp.raise_for_status()
-        return resp.json().get("results", [])
+        data = safe_json(resp, url_hint=f"tmdb_search:{media_type}")
+        return data.get("results", []) if data else []
 
     async def get_detail(self, tmdb_id: int, media_type: str) -> dict:
         endpoint = f"/movie/{tmdb_id}" if media_type == "movie" else f"/tv/{tmdb_id}"
         resp = await self.client.get(endpoint)
         resp.raise_for_status()
-        return resp.json()
+        return safe_json(resp, url_hint=f"tmdb_detail:{tmdb_id}") or {}
 
     async def get_collection(self, collection_id: int) -> dict:
         """获取电影合集详情（包含所有电影列表）"""
         resp = await self.client.get(f"/collection/{collection_id}")
         resp.raise_for_status()
-        return resp.json()
+        return safe_json(resp, url_hint=f"tmdb_collection:{collection_id}") or {}
 
 
 # 需要 httpx

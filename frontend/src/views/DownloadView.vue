@@ -372,7 +372,10 @@ async function handleDelete(task: any) {
   try {
     await downloadApi.deleteTask(task.id, false)
     toast.success('已删除下载任务')
-    await loadTasks()
+    // 给底层下载器 I/O 操作留出时间，避免瞬间刷新拉取到旧数据（僵尸任务复活）
+    setTimeout(() => {
+      loadTasks()
+    }, 400)
   } catch (e) {
     toast.error('删除下载任务失败')
   }

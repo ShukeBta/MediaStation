@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 from urllib.parse import urlparse, urlunparse
@@ -14,6 +15,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common import safe_create_task
+from app.common.utils import safe_json
 from app.deps import CurrentUser, DB
 from app.config import get_settings
 from app.media.models import MediaItem
@@ -130,9 +133,9 @@ async def discover_feed(
         elif source == "bangumi" and bangumi_config.get("api_key"):
             tasks[key] = _fetch_bangumi_section(key)
 
-    # 并行执行所有任务
+    # 并行执行所有任务（使用安全包装器，防止异常静默崩溃）
     if tasks:
-        coros = {k: asyncio.create_task(v) for k, v in tasks.items()}
+        coros = {k: safe_create_task(v, name=f"discover_fetch_{k}") for k, v in tasks.items()}
         for key, task in coros.items():
             try:
                 results[key] = await task
@@ -277,7 +280,9 @@ async def _fetch_tmdb_section(section_key: str, tmdb_config: dict) -> dict:
         if section_key == "tmdb_trending":
             # TMDB trending (all media)
             resp = await client.client.get("/trending/all/day", params={"language": "zh-CN"})
-            data = resp.json()
+            data = safe_json(resp, url_hint="tmdb_trending")
+            if not data:
+                continue
             raw = data.get("results", [])[:12]
             for r in raw:
                 mt = r.get("media_type", "")
@@ -303,7 +308,9 @@ async def _fetch_tmdb_section(section_key: str, tmdb_config: dict) -> dict:
 
         elif section_key == "tmdb_now_playing":
             resp = await client.client.get("/movie/now_playing", params={"language": "zh-CN"})
-            data = resp.json()
+            data = safe_json(resp, url_hint="tmdb_now_playing")
+            if not data:
+                continue
             raw = data.get("results", [])[:20]
             for r in raw:
                 poster = r.get("poster_path")
@@ -324,7 +331,9 @@ async def _fetch_tmdb_section(section_key: str, tmdb_config: dict) -> dict:
 
         elif section_key == "tmdb_popular_movies":
             resp = await client.client.get("/movie/popular", params={"language": "zh-CN"})
-            data = resp.json()
+            data = safe_json(resp, url_hint="tmdb_popular_movies")
+            if not data:
+                continue
             raw = data.get("results", [])[:12]
             for r in raw:
                 poster = r.get("poster_path")
@@ -344,7 +353,9 @@ async def _fetch_tmdb_section(section_key: str, tmdb_config: dict) -> dict:
 
         elif section_key == "tmdb_popular_tv":
             resp = await client.client.get("/tv/popular", params={"language": "zh-CN"})
-            data = resp.json()
+            data = safe_json(resp, url_hint="tmdb_popular_tv")
+            if not data:
+                continue
             raw = data.get("results", [])[:12]
             for r in raw:
                 poster = r.get("poster_path")
@@ -410,9 +421,10 @@ async def _fetch_douban_section(section_key: str) -> dict:
 
             resp = await client.client.get("/j/search_subjects", params=params)
             if resp.status_code == 200:
-                data = resp.json()
-                for s in data.get("subjects", []):
-                    items.append({
+                data = safe_json(resp, url_hint=f"douban_search:{section_key}")
+                if data:
+                    for s in data.get("subjects", []):
+                        items.append({
                         "id": f"douban_{section_key}_{s.get('id', '')}",
                         "douban_id": s.get("id"),
                         "title": s.get("title", ""),
@@ -436,8 +448,9 @@ async def _fetch_douban_section(section_key: str) -> dict:
                 },
             )
             if resp.status_code == 200:
-                data = resp.json()
-                for idx, s in enumerate(data.get("subjects", [])):
+                data = safe_json(resp, url_hint="douban_top250")
+                if data:
+                    for idx, s in enumerate(data.get("subjects", [])):
                     items.append({
                         "id": f"douban_top250_{s.get('id', '')}",
                         "douban_id": s.get("id"),
@@ -468,8 +481,9 @@ async def _fetch_bangumi_section(section_key: str) -> dict:
             # Bangumi 每日放送（当前播出动画）
             resp = await client.client.get("/v0/calendar")
             if resp.status_code == 200:
-                data = resp.json()
-                for week_entry in data:
+                data = safe_json(resp, url_hint="bangumi_calendar")
+                if data:
+                    for week_entry in data:
                     weekday_items = week_entry.get("items", [])
                     for item in weekday_items[:5]:  # 每天最多取 5 部
                         meta = item.get("metadata", {}) or {}

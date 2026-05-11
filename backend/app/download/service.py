@@ -36,8 +36,9 @@ class DownloadService:
     async def create_client(self, data: DownloadClientCreate) -> DownloadClientOut:
         client = DownloadClient(**data.model_dump())
         self.db.add(client)
-        await self.db.flush()
+        await self.db.commit()  # 显式提交
         await self.db.refresh(client)
+        logger.info(f"[下载] 创建客户端: {client.name} (id={client.id})")
         return DownloadClientOut.model_validate(client)
 
     async def update_client(self, client_id: int, data: DownloadClientUpdate) -> DownloadClientOut:
@@ -45,17 +46,19 @@ class DownloadService:
         updates = data.model_dump(exclude_unset=True)
         for k, v in updates.items():
             setattr(client, k, v)
-        await self.db.flush()
+        await self.db.commit()  # 显式提交
         await self.db.refresh(client)
         # 清除缓存
         self._client_cache.pop(client_id, None)
+        logger.info(f"[下载] 更新客户端: {client.name} (id={client_id})")
         return DownloadClientOut.model_validate(client)
 
     async def delete_client(self, client_id: int):
         client = await self._get_client(client_id)
         await self.db.delete(client)
-        await self.db.flush()
+        await self.db.commit()  # 显式提交
         self._client_cache.pop(client_id, None)
+        logger.info(f"[下载] 删除客户端 id={client_id}")
 
     async def test_client(self, client_id: int) -> dict:
         """测试客户端连接"""
@@ -142,7 +145,7 @@ class DownloadService:
 
         # 合并错误消息
         if add_error:
-            error_msg = f"[下载管理] 下载客户端添加失败: Failed to add torrent: {add_error}"
+            error_msg = f"[下载] 下载客户端添加失败: {add_error}"
             if download_error:
                 error_msg = f"{download_error}; {add_error}"
             task = DownloadTask(
@@ -155,8 +158,9 @@ class DownloadService:
                 message=error_msg[:500],
             )
             self.db.add(task)
-            await self.db.flush()
+            await self.db.commit()  # 显式提交
             await self.db.refresh(task)
+            logger.warning(f"[下载] 任务添加失败，已记录到数据库: {error_msg}")
             return DownloadTaskOut.model_validate(task)
 
         # 如果 hash 是占位符（Base64/HTTP/tracker 等方式添加），尝试获取真实 hash
@@ -185,8 +189,9 @@ class DownloadService:
             message=download_error,
         )
         self.db.add(task)
-        await self.db.flush()
+        await self.db.commit()  # 显式提交
         await self.db.refresh(task)
+        logger.info(f"[下载] 添加任务成功: {task.torrent_name} (id={task.id})")
         return DownloadTaskOut.model_validate(task)
 
     async def list_tasks(
@@ -337,6 +342,10 @@ class DownloadService:
                 })
             except Exception:
                 pass
+        
+        # 显式提交事务，确保状态同步持久化
+        await self.db.commit()
+        logger.debug(f"[同步] 已提交事务，更新了 {len(all_updates)} 个任务状态")
 
 
     async def _mark_subscriptions_completed(self, sub_ids: set[int]):
@@ -351,9 +360,11 @@ class DownloadService:
                 if sub and sub.status == "active":
                     sub.status = "completed"
                     logger.info(f"[下载同步] 订阅 {sub.name}(id={sub_id}) 下载完成，状态更新为 completed")
-                    await self.db.flush()
+            # 批量提交订阅状态更新
+            await self.db.commit()
         except Exception as e:
             logger.error(f"[下载同步] 更新订阅状态失败: {e}")
+            await self.db.rollback()
 
     async def detect_and_process_completed(self) -> dict:
         """
@@ -404,10 +415,18 @@ class DownloadService:
                 try:
                     # 在嵌套事务外记录错误信息
                     task.message = f"[organized] 整理异常: {str(e)[:200]}"
-                    await self.db.flush()
+                    await self.db.commit()  # 提交错误信息
                 except:
                     pass
-
+        
+        # 提交所有整理结果
+        try:
+            await self.db.commit()
+            logger.info(f"[下载] 自动整理完成: {stats['organized']} 个入库, {stats['skipped']} 个跳过, {stats['errors']} 个错误")
+        except Exception as e:
+            logger.error(f"[下载] 提交整理结果失败: {e}")
+            await self.db.rollback()
+        
         # 发送 SSE 事件
         if stats["organized"] > 0:
             try:
@@ -501,18 +520,22 @@ class DownloadService:
         task = await self._get_task(task_id)
         # 清除已整理标记以允许重新整理
         task.message = None
-        await self.db.flush()
-
+        await self.db.commit()  # 显式提交
+        logger.info(f"[下载] 手动整理任务 {task_id}")
+        
         result = await self._organize_task(task)
         if result.organized > 0:
             task.message = f"[organized] 已整理 {result.organized} 个文件"
             await self._trigger_library_scan(task)
+            await self.db.commit()  # 提交整理结果
+            logger.info(f"[下载] 任务 {task_id} 整理完成，已入库 {result.organized} 个文件")
         elif result.errors:
             task.message = f"[organized] 整理失败: {'; '.join(result.errors)}"
+            await self.db.commit()
         else:
             task.message = f"[organized] 无需整理"
-        await self.db.flush()
-
+            await self.db.commit()
+        
         return {
             "organized": result.organized,
             "skipped": result.skipped,
@@ -520,40 +543,63 @@ class DownloadService:
         }
 
     async def pause_task(self, task_id: int):
+        """暂停下载任务"""
         task = await self._get_task(task_id)
         if task.client_id:
             try:
                 adapter = await self._get_adapter_by_id(task.client_id)
                 await adapter.connect()
                 await adapter.pause(task.info_hash or "")
+                logger.info(f"[下载] 已暂停任务 {task_id} (hash={task.info_hash})")
             except Exception as e:
                 logger.warning(f"Pause via client failed (task {task_id}), updating local status anyway: {e}")
         task.status = "paused"
-        await self.db.flush()
+        await self.db.commit()  # 显式提交
 
     async def resume_task(self, task_id: int):
+        """恢复下载任务"""
         task = await self._get_task(task_id)
         if task.client_id:
             try:
                 adapter = await self._get_adapter_by_id(task.client_id)
                 await adapter.connect()
                 await adapter.resume(task.info_hash or "")
+                logger.info(f"[下载] 已恢复任务 {task_id} (hash={task.info_hash})")
             except Exception as e:
                 logger.warning(f"Resume via client failed (task {task_id}), updating local status anyway: {e}")
         task.status = "downloading"
-        await self.db.flush()
+        await self.db.commit()  # 显式提交
 
     async def delete_task(self, task_id: int, delete_files: bool = False):
+        """删除下载任务
+        
+        必须先从底层下载客户端物理删除，成功后才清理数据库。
+        如果客户端删除失败，则保留数据库记录（防止同步定时器将任务复活）。
+        """
+        from fastapi import HTTPException
+        
         task = await self._get_task(task_id)
-        if task.client_id:
+        if task.client_id and task.info_hash:
             try:
                 adapter = await self._get_adapter_by_id(task.client_id)
                 await adapter.connect()
-                await adapter.delete(task.info_hash or "", delete_files)
+                success = await adapter.delete(task.info_hash, delete_files)
+                if not success:
+                    raise HTTPException(
+                        status_code=502,
+                        detail=f"底层下载客户端删除任务失败（hash={task.info_hash}），任务保留在数据库中，请检查下载器状态",
+                    )
+                logger.info(f"[下载] 已从客户端删除任务 {task_id} (hash={task.info_hash})")
+            except HTTPException:
+                raise
             except Exception as e:
-                logger.warning(f"Delete from client failed (task {task_id}), removing DB record: {e}")
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"底层下载客户端通信失败: {e}，任务保留在数据库中",
+                )
         await self.db.delete(task)
-        await self.db.flush()
+        await self.db.commit()  # 显式提交事务
+        logger.info(f"[下载] 已从数据库删除任务 {task_id}")
 
     # ── 辅助方法 ──
     async def _get_client(self, client_id: int) -> DownloadClient:
