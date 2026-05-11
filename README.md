@@ -177,7 +177,6 @@ VITE_API_BASE_URL=http://localhost:3002
 
 - [部署指南](./deploy/DEPLOYMENT.md) - 详细部署说明
 - [架构文档](./docs/architecture.md) - 系统架构详解
-- [优化路线图](./docs/OPTIMIZATION_ROADMAP.md) - 后续规划
 
 ---
 

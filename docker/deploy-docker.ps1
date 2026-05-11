@@ -44,7 +44,7 @@ $DockerDir = $ScriptDir
 
 # 创建必要目录
 Write-ColorOutput "[2/5] 创建必要目录..." "Yellow"
-$dirs = @("data", "media", "downloads", "$DockerDir\license_data", "$DockerDir\config")
+$dirs = @("data", "media", "downloads", "$DockerDir\config")
 foreach ($dir in $dirs) {
     $fullPath = Join-Path $ProjectDir $dir
     if (-not (Test-Path $fullPath)) {
@@ -66,8 +66,6 @@ if (-not (Test-Path $envFile)) {
         Write-ColorOutput "必填项:" "Yellow"
         Write-ColorOutput "  - APP_SECRET_KEY"
         Write-ColorOutput "  - TMDB_API_KEY"
-        Write-ColorOutput "  - LICENSE_ADMIN_API_KEY"
-        Write-ColorOutput "  - LICENSE_HMAC_SECRET"
         exit 1
     }
 }
@@ -87,12 +85,6 @@ if ($envContent -match "change-me") {
     # 生成并替换密钥
     $newSecret = Generate-RandomKey
     $envContent = $envContent -replace "APP_SECRET_KEY=.*", "APP_SECRET_KEY=$newSecret"
-    
-    $newAdminKey = Generate-RandomKey
-    $envContent = $envContent -replace "LICENSE_ADMIN_API_KEY=.*", "LICENSE_ADMIN_API_KEY=$newAdminKey"
-    
-    $newHmac = Generate-RandomKey
-    $envContent = $envContent -replace "LICENSE_HMAC_SECRET=.*", "LICENSE_HMAC_SECRET=$newHmac"
     
     Set-Content -Path $envFile -Value $envContent
     Write-ColorOutput "✓ 安全密钥已生成" "Green"
@@ -129,7 +121,6 @@ Write-ColorOutput "============================================" "Blue"
 Write-Host ""
 Write-ColorOutput "服务地址:" "White"
 Write-ColorOutput "  后端 API:   http://localhost:3002" "Green"
-Write-ColorOutput "  授权服务:   http://localhost:3001" "Green"
 Write-ColorOutput "  qBittorrent: http://localhost:8080" "Green"
 Write-Host ""
 Write-ColorOutput "管理命令:" "White"

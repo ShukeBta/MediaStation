@@ -10,7 +10,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,24 +45,9 @@ jobs:
           file: ./docker/Dockerfile
           platforms: linux/amd64,linux/arm64/v8
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/mediastation-backend:${{ github.sha }}
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/mediastation-backend:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/mediastation-backend:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # 构建并推送授权服务镜像
-      - name: Build and Push License Server
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./docker/Dockerfile.license
-          platforms: linux/amd64,linux/arm64/v8
-          push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/mediastation-license:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/mediastation-license:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

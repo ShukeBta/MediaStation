@@ -1,7 +1,7 @@
 # ===========================================
 # MediaStation Docker 部署模板
 # ===========================================
-# 使用方式: cp docker-compose.yml docker-compose.yml.bak && cp docker-compose.template.yml docker-compose.yml
+# 使用方式: cp docker-compose.template.yml docker-compose.yml
 # 然后编辑 docker-compose.yml 配置你的环境
 
 version: '3.8'
@@ -22,49 +22,33 @@ services:
       - APP_DEBUG=false
       - APP_SECRET_KEY=${APP_SECRET_KEY}
       - DATA_DIR=/app/data
-      
+
       # 数据库
       - DATABASE_URL=sqlite+aiosqlite:///app/data/mediastation.db
-      
+
       # TMDb API
       - TMDB_API_KEY=${TMDB_API_KEY}
       - TMDB_LANGUAGE=zh-CN
-      
+
       # 下载器
       - QB_HOST=${QB_HOST:-http://qbittorrent:8080}
       - QB_USERNAME=${QB_USERNAME:-admin}
       - QB_PASSWORD=${QB_PASSWORD:-adminadmin}
-      
+
       # 通知 (可选)
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
-      
+
     volumes:
       - ${DATA_DIR:-./data}:/app/data
       - ${MEDIA_DIR:-./media}:/media:ro
     networks:
       - mediastation-net
-    depends_on:
-      - license-server
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3002/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-
-  # ===========================================
-  # MediaStation 前端 (可选，如果使用后端内置静态文件)
-  # ===========================================
-  # frontend:
-  #   image: mediastation/frontend:latest
-  #   container_name: mediastation-frontend
-  #   restart: unless-stopped
-  #   ports:
-  #     - "${FRONTEND_PORT:-3000}:80"
-  #   depends_on:
-  #     - backend
-  #   networks:
-  #     - mediastation-net
 
   # ===========================================
   # qBittorrent 下载器
@@ -90,31 +74,6 @@ services:
       - mediastation-net
 
   # ===========================================
-  # License 授权服务器 (闭源)
-  # ===========================================
-  license-server:
-    image: mediastation/license-server:latest
-    container_name: mediastation-license
-    restart: unless-stopped
-    ports:
-      - "${LICENSE_PORT:-3001}:3001"
-    environment:
-      - NODE_ENV=production
-      - PORT=3001
-      - LICENSE_ADMIN_API_KEY=${LICENSE_ADMIN_API_KEY}
-      - LICENSE_HMAC_SECRET=${LICENSE_HMAC_SECRET}
-      - LICENSE_DB_PATH=/app/data/license.db
-    volumes:
-      - ./license_data:/app/data
-    networks:
-      - mediastation-net
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/api/v1/status/check"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # ===========================================
   # Nginx 反向代理 (可选)
   # ===========================================
   # nginx:
@@ -129,7 +88,6 @@ services:
   #     - ./nginx/ssl:/etc/nginx/ssl:ro
   #   depends_on:
   #     - backend
-  #     - license-server
   #   networks:
   #     - mediastation-net
 

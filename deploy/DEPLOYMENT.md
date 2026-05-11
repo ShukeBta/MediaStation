@@ -62,15 +62,6 @@ docker compose logs -f
 
 访问 `http://localhost:3001`，默认账号 `admin` / `admin123`。
 
-### 完整版配置
-
-包含 PostgreSQL、Redis、qBittorrent 等可选服务：
-
-```bash
-# 使用完整配置
-docker compose -f docker-compose.full.yml up -d
-```
-
 ---
 
 ## Kubernetes Helm 部署

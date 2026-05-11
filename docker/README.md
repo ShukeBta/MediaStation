@@ -23,10 +23,6 @@ APP_SECRET_KEY=change-me-to-a-random-secret-key-min-32-chars
 
 # TMDb API (申请地址: https://www.themoviedb.org/settings/api)
 TMDB_API_KEY=your-tmdb-api-key
-
-# License 服务器密钥
-LICENSE_ADMIN_API_KEY=change-me
-LICENSE_HMAC_SECRET=change-me
 ```
 
 ### 3. 一键部署
@@ -47,7 +43,6 @@ chmod +x deploy-docker.sh
 部署完成后访问：
 - **主界面**: http://localhost:3002
 - **qBittorrent**: http://localhost:8080
-- **授权管理**: http://localhost:3001
 
 ---
 
@@ -83,14 +78,11 @@ docker compose up -d
 mediastation/
 ├── docker/
 │   ├── docker-compose.yml      # 主配置
-│   ├── docker-compose.license.yml  # 独立授权服务
 │   ├── .env.template           # 环境变量模板
 │   ├── .env                   # 你的配置 (不提交)
 │   ├── Dockerfile             # 后端镜像
-│   ├── Dockerfile.license     # 授权服务镜像
 │   ├── deploy-docker.sh       # Linux/macOS 部署脚本
 │   ├── deploy-docker.ps1      # Windows 部署脚本
-│   ├── license_data/          # 授权数据库
 │   └── config/                # 配置文件
 │
 ├── data/                      # 应用数据
@@ -109,7 +101,6 @@ mediastation/
 | backend | `./data` | SQLite 数据库 |
 | qbittorrent | `./downloads` | 下载文件 |
 | qbittorrent | `./config/qbittorrent` | qBittorrent 配置 |
-| license-server | `./license_data` | 授权数据库 |
 
 ---
 
@@ -121,7 +112,6 @@ mediastation/
 
 ```env
 BACKEND_PORT=3002      # 后端 API
-LICENSE_PORT=3001      # 授权服务
 ```
 
 ### 添加更多 Tracker
@@ -140,7 +130,6 @@ LICENSE_PORT=3001      # 授权服务
 ```bash
 # 查看详细日志
 docker compose logs -f backend
-docker compose logs -f license-server
 ```
 
 ### Q: 如何更新？
@@ -153,9 +142,6 @@ docker compose up -d
 ```bash
 # 备份整个 data 目录
 tar -czf mediastation-backup.tar.gz data/
-
-# 备份授权数据库
-cp license_data/license.db license.db.backup
 ```
 
 ### Q: 完全重置？
@@ -171,4 +157,4 @@ docker compose up -d
 1. **修改默认密码** - qBittorrent 默认账号 `admin/adminadmin`
 2. **设置强密钥** - 不要使用默认的 `change-me` 密钥
 3. **限制端口访问** - 使用防火墙限制外部访问
-4. **定期备份** - 定期备份 `data/` 和 `license_data/` 目录
+4. **定期备份** - 定期备份 `data/` 目录
