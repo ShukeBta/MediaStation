@@ -81,8 +81,6 @@ class UserPermissionOut(BaseModel):
     can_edit_media: bool = False
     can_rescrape: bool = False
     can_use_ai: bool = False
-    can_manage_chapters: bool = False
-    can_generate_ai_chapters: bool = False
     can_capture_frames: bool = False
     can_manage_downloads: bool = False
     can_view_discover: bool = False
@@ -108,8 +106,6 @@ class UserPermissionUpdate(BaseModel):
     can_edit_media: bool | None = None
     can_rescrape: bool | None = None
     can_use_ai: bool | None = None
-    can_manage_chapters: bool | None = None
-    can_generate_ai_chapters: bool | None = None
     can_capture_frames: bool | None = None
     can_manage_downloads: bool | None = None
     can_view_discover: bool | None = None

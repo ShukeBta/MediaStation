@@ -15,8 +15,6 @@ export interface UserPermissions {
   can_edit_media: boolean
   can_rescrape: boolean
   can_use_ai: boolean
-  can_manage_chapters: boolean
-  can_generate_ai_chapters: boolean
   can_capture_frames: boolean
   can_manage_downloads: boolean
   can_view_discover: boolean

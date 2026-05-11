@@ -1,9 +1,0 @@
-Found 8 rows
-(1, '2026-05-03 13:47:44', '2026-05-03 13:47:44', 'tmdb', '6bdda08212872fbd8e4d92f6877ec282', 'https://api.themoviedb.org/3', None, 1, 'TMDb API - 电影/剧集主数据源')
-(2, '2026-05-03 13:47:44', '2026-05-03 13:47:44', 'douban', None, None, None, 1, '豆瓣 - 中文元数据补充源')
-(3, '2026-05-03 13:47:44', '2026-05-03 13:47:44', 'bangumi', None, 'https://api.bgm.tv/v0', None, 1, 'Bangumi - 番剧/动画元数据源')
-(4, '2026-05-03 13:47:44', '2026-05-03 13:47:44', 'thetvdb', None, 'https://api4.thetvdb.com/v4', None, 1, 'TheTVDB - 剧集增强数据源')
-(5, '2026-05-03 13:47:44', '2026-05-03 13:47:44', 'fanart', None, 'https://webservice.fanart.tv/v3', None, 1, 'Fanart.tv - 高质量图片增强源')
-(6, '2026-05-03 13:47:44', '2026-05-03 13:47:44', 'openai', None, 'https://api.openai.com/v1', None, 1, 'OpenAI 兼容 API - AI 刮削和智能增强')
-(7, '2026-05-03 13:47:44', '2026-05-03 13:47:44', 'siliconflow', None, 'https://api.siliconflow.cn/v1', None, 1, '硅基流动 - 国产 AI API 平替')
-(8, '2026-05-03 13:47:44', '2026-05-03 13:47:44', 'deepseek', None, 'https://api.deepseek.com/v1', None, 1, 'DeepSeek - 国产大模型 API')

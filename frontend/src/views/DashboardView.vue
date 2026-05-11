@@ -351,8 +351,8 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { mediaApi } from '@/api/media'
 import { systemApi, statsApi } from '@/api/system'
-import { watchHistoryApi } from '@/api/system'
 import { useFormat } from '@/composables/useFormat'
+import { useAuthStore } from '@/stores/auth'
 import AppEmpty from '@/components/AppEmpty.vue'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -362,9 +362,10 @@ import VChart from 'vue-echarts'
 
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent])
 
-const { formatFileSize } = useFormat()
+const { formatFileSize, formatDuration } = useFormat()
 
-const loading = ref(false)
+const auth = useAuthStore()
+const isAdmin = computed(() => auth.isAdmin)
 const trendPeriod = ref('7d')
 
 // 趋势周期选项（与后端 API 参数一致：1d/7d/30d）
@@ -385,10 +386,7 @@ const continueWatching = reactive({ data: [] as any[], loaded: false })
 const schedulerJobs = reactive({ data: [] as any[], loaded: false })
 const triggeringJobs = ref<Record<string, boolean>>({})
 
-const isAdmin = computed(() => {
-  const user = JSON.parse(localStorage.getItem('ms-user') || '{}')
-  return user.role === 'admin'
-})
+const loading = ref(false)
 
 // 获取实际颜色值（用于 ECharts Canvas）
 function getComputedColor(varName: string, fallback: string): string {
@@ -486,14 +484,6 @@ function formatTime(seconds: number): string {
   const s = Math.floor(seconds % 60)
   if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
   return `${m}:${s.toString().padStart(2, '0')}`
-}
-
-function formatDuration(seconds: number): string {
-  if (!seconds) return '0分钟'
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  if (h > 0) return `${h}小时${m}分钟`
-  return `${m}分钟`
 }
 
 function formatScheduleTime(timeStr: string): string {

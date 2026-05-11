@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import delete, func, join, or_, select, update, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.media.models import Favorite, MediaEpisode, MediaItem, MediaLibrary, MediaSeason, Subtitle
@@ -394,7 +394,6 @@ class MediaRepository:
     async def get_favorites(self, user_id: int, page: int = 1, page_size: int = 20) -> tuple[list[MediaItem], int]:
         """获取用户收藏列表"""
         from sqlalchemy.orm import selectinload
-        from sqlalchemy import select, func, desc, join
 
         # JOIN favorites 表以获取 created_at
         count_query = select(func.count(MediaItem.id)).select_from(

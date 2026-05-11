@@ -64,9 +64,7 @@ class UserPermission(TimestampMixin, Base):
     # ── 受限功能（普通用户默认关闭，需管理员开启）──
     can_edit_media: Mapped[bool] = mapped_column(Boolean, default=False)          # 编辑媒体信息
     can_rescrape: Mapped[bool] = mapped_column(Boolean, default=False)            # 重新刮削
-    can_use_ai: Mapped[bool] = mapped_column(Boolean, default=False)              # AI 智能功能
-    can_manage_chapters: Mapped[bool] = mapped_column(Boolean, default=False)      # 章节管理（精彩片段、封面候选、手动添加）
-    can_generate_ai_chapters: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_use_ai: Mapped[bool] = mapped_column(Boolean, default=False)              # AI 智能功能（AI 优化刮削）
     can_capture_frames: Mapped[bool] = mapped_column(Boolean, default=False)      # 视频截帧
     can_manage_downloads: Mapped[bool] = mapped_column(Boolean, default=False)    # 下载管理
     can_view_discover: Mapped[bool] = mapped_column(Boolean, default=False)       # 发现页

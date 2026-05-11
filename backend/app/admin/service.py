@@ -2,6 +2,7 @@
 管理后台服务
 """
 import logging
+import pathlib
 from datetime import datetime
 from typing import Any
 
@@ -177,7 +178,8 @@ class AdminService:
             try:
                 async with async_session_factory() as db:
                     service = MediaService(MediaRepository(db), event_bus)
-                    await service.scrape_item(media_id, sources=data.sources)
+                    from app.media.schemas import ScrapeRequest
+                    await service.scrape_item(media_id, ScrapeRequest())
                     started.append(media_id)
             except Exception as e:
                 logger.error(f"Batch scrape failed for media {media_id}: {e}")
@@ -336,8 +338,6 @@ class AdminService:
 
     async def browse_files(self, path: str = ".") -> BrowseResponse:
         """浏览目录"""
-        import os
-        import pathlib
 
         # 安全检查
         if not self._is_safe_path(path):
@@ -376,8 +376,6 @@ class AdminService:
 
     async def create_directory(self, path: str) -> FileItem:
         """创建目录"""
-        import os
-        import pathlib
 
         if not self._is_safe_path(path):
             raise ValueError("Path not allowed")
@@ -394,7 +392,6 @@ class AdminService:
 
     async def rename_file(self, path: str, new_name: str) -> FileItem:
         """重命名文件"""
-        import pathlib
 
         if not self._is_safe_path(path):
             raise ValueError("Path not allowed")
@@ -418,7 +415,6 @@ class AdminService:
 
     async def delete_file(self, path: str, force: bool = False) -> dict:
         """删除文件"""
-        import pathlib
         import shutil
 
         if not self._is_safe_path(path):
@@ -441,7 +437,6 @@ class AdminService:
 
     async def move_file(self, path: str, target: str) -> FileItem:
         """移动文件"""
-        import pathlib
         import shutil
 
         if not self._is_safe_path(path) or not self._is_safe_path(target):
@@ -554,7 +549,6 @@ class AdminService:
 
     async def preview_rename(self, path: str, new_name: str) -> dict:
         """预览重命名结果"""
-        import pathlib
         
         p = pathlib.Path(path)
         if not p.exists():
@@ -604,7 +598,6 @@ class AdminService:
 
     async def batch_rename_execute(self, operations: list) -> BatchOperationResult:
         """批量重命名执行"""
-        import pathlib
         
         success = []
         errors = []
@@ -687,7 +680,6 @@ class AdminService:
         对每个文件调用 LLM 分析文件名，返回规范化的媒体文件名建议。
         仅生成建议，不执行实际重命名。
         """
-        import pathlib
         import json
         import httpx
 
@@ -971,8 +963,6 @@ class AdminService:
 
     def _is_safe_path(self, path: str) -> bool:
         """检查路径安全性"""
-        import os
-        import pathlib
 
         # 允许的根目录
         allowed_roots = [
