@@ -18,7 +18,7 @@ cd "$BUILD_DIR"
 # ── 创建包结构 ──
 echo "创建包结构..."
 
-# 创建 INFO 文件
+# 创建 INFO 文件（兼容 DSM 7.x 权限模型）
 cat > INFO.json << 'EOF'
 {
     "package": "MediaStation",
@@ -31,6 +31,9 @@ cat > INFO.json << 'EOF'
     "dsm_ui_compatibility": "7.0-",
     "distributor": "MediaStation",
     "distributor_url": "https://github.com/your-repo/mediastation",
+    "startstop_priority": "100",
+    "run_as": "package",
+    "os_min_ver": "7.0-40000",
     "size": 500000000,
     "install_deprecated_packages": false,
     "install_conflict_packages": [],
@@ -79,13 +82,15 @@ postinst () {
     cd ${SYNOPKG_PKGDEST}
     tar -xzf ${SYNOPKG_PKGVOL}/package.tgz
 
-    # 设置权限
-    chown -R root:root ${SYNOPKG_PKGDEST}
-    chmod +x ${SYNOPKG_PKGDEST}/bin/*
+    # 设置权限（DSM 7.x 必须使用 package 用户，禁止 root:root）
+    chown -R MediaStation:MediaStation ${SYNOPKG_PKGDEST}
+    chmod 755 ${SYNOPKG_PKGDEST}
+    [ -d "${SYNOPKG_PKGDEST}/bin" ] && chmod +x ${SYNOPKG_PKGDEST}/bin/*
 
-    # 创建数据目录
+    # 创建数据目录（使用 package 用户权限）
     mkdir -p /var/packages/${PACKAGE_NAME}/var
     chown -R MediaStation:MediaStation /var/packages/${PACKAGE_NAME}/var
+    chmod 755 /var/packages/${PACKAGE_NAME}/var
 
     # 启动 Docker
     /usr/syno/bin/synopkg start Docker
