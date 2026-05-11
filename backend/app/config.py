@@ -78,11 +78,9 @@ class Settings(BaseSettings):
     max_transcode_jobs: int = 2
     transcode_enabled: bool = False  # 默认关闭转码，仅 Direct Play
 
-    # ── 授权服务器（在线验证模式） ──
-    license_server_url: str = ""                   # 留空 = 本地模式（向后兼容）
-    license_server_secret: str = ""                 # HMAC 签名密钥（与服务端一致）
-    license_heartbeat_interval_days: int = 7        # 心跳间隔天数
-    license_grace_period_days: int = 14             # 离线宽限期天数
+    # ── 授权服务器（在线验证模式，已废弃） ──
+    # 保留空壳以兼容旧 .env 配置，不再被代码读取。
+    # 如需在线授权验证请通过独立服务实现。
 
     # ── JWT ──
     jwt_access_expire_minutes: int = 60

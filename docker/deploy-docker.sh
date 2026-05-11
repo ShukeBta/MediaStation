@@ -44,7 +44,6 @@ echo -e "${YELLOW}[1/5] 创建必要目录...${NC}"
 mkdir -p "$PROJECT_DIR/data"
 mkdir -p "$PROJECT_DIR/media"
 mkdir -p "$PROJECT_DIR/downloads"
-mkdir -p "$DOCKER_DIR/license_data"
 mkdir -p "$DOCKER_DIR/config/qbittorrent"
 echo -e "${GREEN}✓ 目录创建完成${NC}"
 
@@ -58,8 +57,6 @@ if [ ! -f "$DOCKER_DIR/.env" ]; then
         echo -e "${YELLOW}必填项:${NC}"
         echo "  - APP_SECRET_KEY"
         echo "  - TMDB_API_KEY"
-        echo "  - LICENSE_ADMIN_API_KEY"
-        echo "  - LICENSE_HMAC_SECRET"
         exit 1
     else
         echo -e "${RED}错误: 未找到 .env.template${NC}"
@@ -80,18 +77,6 @@ if grep -q "change-me-to" .env 2>/dev/null; then
         NEW_SECRET=$(openssl rand -hex 32)
         sed -i "s/APP_SECRET_KEY=change-me-to-a-random-secret-key-min-32-chars/APP_SECRET_KEY=$NEW_SECRET/" .env
         echo -e "${GREEN}✓ APP_SECRET_KEY 已生成${NC}"
-    fi
-    
-    if grep -q "LICENSE_ADMIN_API_KEY=change-me" .env 2>/dev/null; then
-        NEW_ADMIN_KEY=$(openssl rand -hex 32)
-        sed -i "s/LICENSE_ADMIN_API_KEY=change-me-to-a-random-admin-key/LICENSE_ADMIN_API_KEY=$NEW_ADMIN_KEY/" .env
-        echo -e "${GREEN}✓ LICENSE_ADMIN_API_KEY 已生成${NC}"
-    fi
-    
-    if grep -q "LICENSE_HMAC_SECRET=change-me" .env 2>/dev/null; then
-        NEW_HMAC=$(openssl rand -hex 32)
-        sed -i "s/LICENSE_HMAC_SECRET=change-me-to-a-random-hmac-secret/LICENSE_HMAC_SECRET=$NEW_HMAC/" .env
-        echo -e "${GREEN}✓ LICENSE_HMAC_SECRET 已生成${NC}"
     fi
 fi
 
@@ -119,7 +104,6 @@ echo -e "${BLUE}===========================================${NC}"
 echo
 echo -e "服务地址:"
 echo -e "  ${GREEN}后端 API${NC}:   http://localhost:3002"
-echo -e "  ${GREEN}授权服务${NC}:   http://localhost:3001"
 echo -e "  ${GREEN}qBittorrent${NC}: http://localhost:8080"
 echo
 echo -e "管理命令:"

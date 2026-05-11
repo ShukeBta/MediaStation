@@ -24,35 +24,29 @@ services:
       - APP_DEBUG=false
       - APP_SECRET_KEY=${APP_SECRET_KEY}
       - DATA_DIR=/data
-      
+
       # 数据库
       - DATABASE_URL=sqlite+aiosqlite:///data/mediastation.db
-      
+
       # TMDb API
       - TMDB_API_KEY=${TMDB_API_KEY}
       - TMDB_LANGUAGE=zh-CN
-      
+
       # 下载器
       - QB_HOST=http://qbittorrent:8080
       - QB_USERNAME=${QB_USERNAME:-admin}
       - QB_PASSWORD=${QB_PASSWORD:-adminadmin}
-      
-      # 授权服务器
-      - LICENSE_SERVER_URL=http://license-server:3001
-      
+
       # 通知 (可选)
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
-      
+
     volumes:
       - ${DATA_DIR:-../data}:/data
       - ${MEDIA_DIR:-../media}:/media:ro
       - ${DOWNLOAD_DIR:-../downloads}:/downloads
     networks:
       - mediastation-net
-    depends_on:
-      license-server:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3002/api/health"]
       interval: 30s
@@ -82,34 +76,6 @@ services:
       - "6881:6881/udp"
     networks:
       - mediastation-net
-
-  # ===========================================
-  # License 授权服务器 (闭源)
-  # ===========================================
-  license-server:
-    build:
-      context: .
-      dockerfile: Dockerfile.license
-    image: mediastation/license-server:latest
-    container_name: mediastation-license
-    restart: unless-stopped
-    ports:
-      - "${LICENSE_PORT:-3001}:3001"
-    environment:
-      - NODE_ENV=production
-      - PORT=3001
-      - LICENSE_ADMIN_API_KEY=${LICENSE_ADMIN_API_KEY}
-      - LICENSE_HMAC_SECRET=${LICENSE_HMAC_SECRET}
-    volumes:
-      - ./license_data:/app/data
-    networks:
-      - mediastation-net
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/v1/status/check"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
 
 # ===========================================
 # 网络配置

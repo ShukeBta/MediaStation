@@ -597,21 +597,6 @@ class DownloadService:
         await self.db.delete(task)
         await self.db.commit()
         logger.info(f"[下载] 已从数据库删除任务 {task_id} (client_delete_ok={client_delete_ok})")
-            try:
-                adapter = await self._get_adapter_by_id(task.client_id)
-                await adapter.connect()
-                client_delete_ok = await adapter.delete(task.info_hash, delete_files)
-                if client_delete_ok:
-                    logger.info(f"[下载] 已从客户端删除任务 {task_id} (hash={task.info_hash})")
-                else:
-                    logger.warning(f"[下载] 客户端返回删除失败（hash={task.info_hash}），仍删除本地记录")
-            except Exception as e:
-                logger.warning(f"[下载] 客户端通信失败: {e}（task_id={task_id}），仍删除本地记录")
-
-        # 阶段 2：无论如何都删除本地记录
-        await self.db.delete(task)
-        await self.db.commit()
-        logger.info(f"[下载] 已从数据库删除任务 {task_id} (client_delete_ok={client_delete_ok})")
 
     # ── 辅助方法 ──
     async def _get_client(self, client_id: int) -> DownloadClient:
