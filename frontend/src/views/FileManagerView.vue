@@ -649,13 +649,30 @@ const filteredItems = computed(() => {
 
 const pathSegments = computed(() => {
   if (!currentPath.value) return []
-  const parts = currentPath.value.replace(/\\/g, '/').split('/')
-  return parts
-    .filter(Boolean)
-    .map((label, i, arr) => ({
-      label,
-      path: '/' + arr.slice(0, i + 1).join('/'),
-    }))
+  const raw = currentPath.value
+
+  // 判断是否为 Windows 盘符路径（如 D:\Movies 或 D:/Movies）
+  const winDriveMatch = raw.match(/^([A-Za-z]:[/\\])(.*)$/)
+
+  if (winDriveMatch) {
+    // Windows 路径：第一段保留完整盘符（如 "D:\"），后续按分隔符切分
+    const drive = winDriveMatch[1].replace(/\//g, '\\')   // 统一用反斜杠
+    const rest = winDriveMatch[2].replace(/\\/g, '/').split('/').filter(Boolean)
+
+    const segments = [{ label: drive, path: drive }]
+    rest.forEach((label, i) => {
+      const path = drive + rest.slice(0, i + 1).join('\\')
+      segments.push({ label, path })
+    })
+    return segments
+  }
+
+  // Linux / 容器内绝对路径
+  const parts = raw.replace(/\\/g, '/').split('/').filter(Boolean)
+  return parts.map((label, i, arr) => ({
+    label,
+    path: '/' + arr.slice(0, i + 1).join('/'),
+  }))
 })
 
 const canGoBack = computed(() => history.value.length > 0)

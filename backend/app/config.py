@@ -82,6 +82,12 @@ class Settings(BaseSettings):
     # 保留空壳以兼容旧 .env 配置，不再被代码读取。
     # 如需在线授权验证请通过独立服务实现。
 
+    # ── 媒体目录（用户自定义，逗号分隔的绝对路径列表） ──
+    # 示例（Linux）: MEDIA_DIRS=/media/movies,/mnt/nas/tv,/home/user/anime
+    # 示例（Windows）: MEDIA_DIRS=D:\Movies,E:\TV,F:\Anime
+    # 留空则使用 DATA_DIR/media/{movies,tv,anime} 作为默认目录
+    media_dirs_env: str = ""
+
     # ── JWT ──
     jwt_access_expire_minutes: int = 60
     jwt_refresh_expire_days: int = 30
@@ -155,7 +161,30 @@ class Settings(BaseSettings):
 
     @property
     def media_dirs(self) -> list[Path]:
-        """默认媒体目录"""
+        """媒体目录列表
+        
+        优先使用 MEDIA_DIRS 环境变量（逗号分隔的绝对路径）。
+        若未设置，则回退到 DATA_DIR/media/{movies,tv,anime} 默认目录。
+        
+        支持格式：
+          Linux:   MEDIA_DIRS=/media/movies,/mnt/nas/tv
+          Windows: MEDIA_DIRS=D:\\Movies,E:\\TV
+        """
+        if self.media_dirs_env.strip():
+            dirs = []
+            for raw in self.media_dirs_env.split(","):
+                raw = raw.strip()
+                if raw:
+                    p = Path(raw)
+                    # 仅创建目录（不强制要求已存在，允许挂载点部署场景）
+                    try:
+                        p.mkdir(parents=True, exist_ok=True)
+                    except Exception:
+                        pass
+                    dirs.append(p)
+            if dirs:
+                return dirs
+        # 默认目录（回退）
         base = Path(self.data_dir) / "media"
         return [base / "movies", base / "tv", base / "anime"]
 

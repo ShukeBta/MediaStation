@@ -2,6 +2,7 @@
 管理后台服务
 """
 import logging
+import os
 import pathlib
 from datetime import datetime
 from typing import Any
@@ -11,6 +12,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from app.admin.schemas import *
+from app.common.schemas import PathValidator
 from app.config import get_settings
 from app.database import async_session_factory
 from app.media.repository import MediaRepository
@@ -658,18 +660,49 @@ class AdminService:
         )
 
     async def get_media_folders(self) -> list[str]:
-        """获取媒体库配置的所有文件夹"""
-        folders: set[str] = set()
+        """获取文件管理器可浏览的根目录列表
         
-        # 添加配置的媒体目录
-        for d in self.settings.media_dirs:
-            folders.add(str(d))
-        
-        # 添加数据目录
-        if self.settings.data_dir:
-            folders.add(str(self.settings.data_dir))
-        
-        return list(folders)
+        优先级：
+        1. 用户通过 MEDIA_DIRS 环境变量配置的目录
+        2. 数据库中已创建的媒体库路径（MediaLibrary.path）
+        3. 回退到 data_dir 下的默认媒体子目录
+        """
+        folders: list[str] = []
+        seen: set[str] = set()
+
+        def _add(p: str) -> None:
+            resolved = str(pathlib.Path(p).resolve())
+            if resolved not in seen:
+                seen.add(resolved)
+                folders.append(resolved)
+
+        # 1. MEDIA_DIRS 环境变量配置的目录（用户明确指定）
+        if self.settings.media_dirs_env.strip():
+            for raw in self.settings.media_dirs_env.split(","):
+                raw = raw.strip()
+                if raw:
+                    _add(raw)
+
+        # 2. 数据库中已有的媒体库路径
+        try:
+            from app.media.models import MediaLibrary
+            from sqlalchemy import select
+            async with async_session_factory() as db:
+                result = await db.execute(
+                    select(MediaLibrary.path).where(MediaLibrary.enabled == True)
+                )
+                for (lib_path,) in result.fetchall():
+                    if lib_path:
+                        _add(lib_path)
+        except Exception as e:
+            logger.warning(f"Failed to load media library paths from DB: {e}")
+
+        # 3. 如果以上均无结果，回退到 config.media_dirs（默认子目录或 MEDIA_DIRS 解析结果）
+        if not folders:
+            for d in self.settings.media_dirs:
+                _add(str(d))
+
+        return folders
 
     # ── AI 重命名 ──
 
@@ -962,44 +995,10 @@ class AdminService:
         return f"{minutes}m {seconds}s"
 
     def _is_safe_path(self, path: str) -> bool:
-        """检查路径安全性"""
-
-        # 允许的根目录
-        allowed_roots = [
-            self.settings.data_dir,
-            self.settings.media_dirs[0] if self.settings.media_dirs else "/media",
-            "/mnt",
-            "/data",
-        ]
-
-        # 阻止的系统目录
-        blocked = [
-            "/proc", "/sys", "/dev", "/boot", "/etc",
-            "/run", "/snap", "/bin", "/sbin", "/lib",
-        ]
-
-        try:
-            abs_path = pathlib.Path(path).resolve()
-
-            # 检查是否在允许的目录下
-            for root in allowed_roots:
-                if str(abs_path).startswith(str(root)):
-                    return True
-
-            # 检查是否在阻止的目录下
-            for block in blocked:
-                if str(abs_path).startswith(block):
-                    return False
-
-            # Windows 特殊检查
-            if os.name == 'nt':
-                windows_blocked = ["C:\\Windows", "C:\\Program Files", "C:\\Program Files (x86)"]
-                for block in windows_blocked:
-                    if str(abs_path).startswith(block):
-                        return False
-
-            # 允许其他路径（谨慎）
-            return True
-
-        except Exception:
-            return False
+        """检查路径安全性（委托给 PathValidator，与 router 层保持一致）"""
+        validator = PathValidator(
+            media_dirs=[str(d) for d in self.settings.media_dirs],
+            data_dir=self.settings.data_dir,
+        )
+        safe, _ = validator.is_safe(path)
+        return safe

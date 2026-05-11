@@ -111,8 +111,8 @@ class ListResponse(BaseModel, Generic[T]):
 class PathValidator:
     """文件路径白名单验证器
     
-    Issue #57 修复：使用 pathlib.is_relative_to() 进行严格路径校验，
-    防止目录穿越攻击（Path Traversal）。
+    支持 Linux 绝对路径和 Windows 盘符路径。
+    使用 pathlib.is_relative_to() 进行严格路径校验，防止目录穿越攻击。
     """
     
     # 阻止的系统目录（这些目录绝对不能访问）
@@ -131,33 +131,46 @@ class PathValidator:
         """初始化路径验证器
         
         Args:
-            media_dirs: 媒体库配置目录列表
+            media_dirs: 媒体库配置目录列表（用户自定义，支持任意绝对路径）
             data_dir: 数据目录
         """
-        # 构建允许的根目录列表（使用 pathlib.Path.resolve() 确保绝对路径）
+        import os
         self.allowed_roots: list[pathlib.Path] = []
         
+        # 1. 数据目录始终允许
         if data_dir:
             self.allowed_roots.append(pathlib.Path(data_dir).resolve())
         else:
             self.allowed_roots.append(pathlib.Path("/data").resolve())
         
-        # 添加常见媒体目录
-        for root in ["/mnt", "/media", "/home"]:
-            try:
-                p = pathlib.Path(root).resolve()
-                if p.exists():
-                    self.allowed_roots.append(p)
-            except Exception:
-                pass
+        # 2. 添加常见 Linux 媒体挂载目录（仅在存在时加入，Windows 不适用）
+        if os.name != 'nt':
+            for root in ["/mnt", "/media", "/home", "/nas", "/storage"]:
+                try:
+                    p = pathlib.Path(root).resolve()
+                    if p.exists():
+                        self.allowed_roots.append(p)
+                except Exception:
+                    pass
         
-        # 添加用户配置的媒体库目录
+        # 3. Windows：允许所有驱动器根目录（D:\, E:\, 等）
+        if os.name == 'nt':
+            import string
+            for drive in string.ascii_uppercase:
+                drive_path = pathlib.Path(f"{drive}:\\")
+                try:
+                    if drive_path.exists():
+                        self.allowed_roots.append(drive_path)
+                except Exception:
+                    pass
+        
+        # 4. 用户通过 MEDIA_DIRS 或数据库媒体库配置的目录（最高优先级，无需存在检查）
         if media_dirs:
             for d in media_dirs:
                 try:
                     p = pathlib.Path(d).resolve()
-                    if p.exists():
-                        self.allowed_roots.append(p)
+                    # 即使目录尚未创建也加入白名单（支持挂载点场景）
+                    self.allowed_roots.append(p)
                 except Exception:
                     pass
     
@@ -189,42 +202,32 @@ class PathValidator:
     
     def _is_in_allowed_path(self, resolved_path: pathlib.Path) -> tuple[bool, str | None]:
         """
-        检查路径是否在允许的目录下（Issue #57 修复）
-        
-        使用 is_relative_to() 确保路径在允许目录内部，而不是仅检查前缀。
+        检查路径是否在允许的目录下。
+        使用 is_relative_to() 确保路径严格在允许目录内部。
         """
         for root in self.allowed_roots:
             try:
-                # 核心安全断言：resolved_path 必须在 root 内部
-                if resolved_path.is_relative_to(root):
+                # 路径与根目录相同，或是其子路径，均允许
+                if resolved_path == root or resolved_path.is_relative_to(root):
                     return True, None
             except Exception:
-                # is_relative_to() 如果路径不相对会抛出 ValueError
                 pass
         
-        # 允许用户主目录（如果不在允许列表中）
-        import os
-        home = pathlib.Path(os.path.expanduser("~")).resolve()
-        try:
-            if resolved_path.is_relative_to(home):
-                return True, None
-        except Exception:
-            pass
-        
-        return False, f"路径不在允许的目录内: {self.allowed_roots[:3]}..."
+        roots_display = [str(r) for r in self.allowed_roots[:5]]
+        return False, f"路径不在允许的目录内，已配置根目录: {roots_display}"
     
     def is_safe(self, path: str) -> tuple[bool, str | None]:
         """
         验证路径是否安全（Issue #57 核心修复）
         
         安全检查流程：
-        1. 解析为绝对路径
+        1. 解析为绝对路径（直接使用原始路径，不剥离斜杠）
         2. 检查是否包含 .. 穿越组件
         3. 检查是否在阻止的系统目录下
         4. 检查是否在允许的目录下
         
         Args:
-            path: 待验证的路径
+            path: 待验证的路径（支持 Linux 绝对路径、Windows 盘符路径）
             
         Returns:
             (是否安全, 错误信息或 None)
@@ -232,15 +235,19 @@ class PathValidator:
         import os
         
         try:
-            # Step 1: 解析路径
-            # 移除首部斜杠防止绝对路径注入
-            clean_path = path.lstrip("/\\")
-            abs_path = (pathlib.Path("/") / clean_path).resolve()
+            # Step 1: 直接解析为绝对路径，不剥离首斜杠
+            # 原实现错误地 lstrip("/\\") 导致 /media/movies → media/movies
+            # 再拼接 "/" → /media/movies（表面看没问题）
+            # 但对于 Windows 路径 D:\Movies → D:\Movies（lstrip 无影响，
+            # 而后 Path("/") / "D:\\Movies" → 错误拼接）
+            abs_path = pathlib.Path(path).resolve()
             
             # Step 2: 检查是否包含 .. 穿越组件（双重检查）
-            # 如果解析后的路径和清理后的路径不一致，说明有穿越
+            # resolve() 已消解 ..，若解析后路径与规范路径不同说明有问题
             try:
-                abs_path.relative_to(pathlib.Path("/"))
+                # 确保路径是绝对路径（resolve() 总是返回绝对路径）
+                if not abs_path.is_absolute():
+                    return False, "非法路径：无法解析为绝对路径"
             except ValueError:
                 return False, "非法路径"
             
