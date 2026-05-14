@@ -1,8 +1,11 @@
 """
 播放列表 API 路由
 """
+import logging
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Body
+
+logger = logging.getLogger(__name__)
 
 from app.playlist.schemas import (
     PlaylistCreate,
@@ -36,9 +39,15 @@ async def list_playlists(user: CurrentUser):
     
     返回用户创建的所有播放列表，以及公开的播放列表
     """
-    service = get_service()
-    playlists = await service.list_playlists(user.id)
-    return SuccessResponse.ok(playlists)
+    try:
+        service = get_service()
+        playlists = await service.list_playlists(user.id)
+        return SuccessResponse.ok(playlists)
+    except Exception as e:
+        import traceback
+        error_detail = f"{type(e).__name__}: {str(e)}\n{traceback.format_exc()}"
+        logger.error(f"Playlist list error: {error_detail}")
+        raise HTTPException(status_code=500, detail=error_detail)
 
 
 # 兼容前端请求带尾部斜杠的情况

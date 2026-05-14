@@ -57,7 +57,7 @@ async def get_overview():
     response_model=SuccessResponse[PlayTrend],
 )
 async def get_play_trend(
-    period: Annotated[str, Query(description="时间范围: 1d, 7d, 30d")] = "7d",
+    period: Annotated[str, Query(description="时间范围: 1d, 7d, 30d", pattern=r"^(1d|7d|30d)$")] = "7d",
 ):
     """
     获取播放趋势

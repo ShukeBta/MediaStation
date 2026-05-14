@@ -78,6 +78,13 @@ class Settings(BaseSettings):
     max_transcode_jobs: int = 2
     transcode_enabled: bool = False  # 默认关闭转码，仅 Direct Play
 
+    # ── 媒体库路径（整理目标目录）──
+    # Docker 部署时通过环境变量挂载，非 Docker 部署可直接填写绝对路径
+    # 留空则使用 {data_dir}/media/{movies|tv|anime}
+    movies_dir: str = ""
+    tv_dir: str = ""
+    anime_dir: str = ""
+
     # ── 授权服务器（在线验证模式，已废弃） ──
     # 保留空壳以兼容旧 .env 配置，不再被代码读取。
     # 如需在线授权验证请通过独立服务实现。
@@ -155,9 +162,36 @@ class Settings(BaseSettings):
 
     @property
     def media_dirs(self) -> list[Path]:
-        """默认媒体目录"""
+        """默认媒体目录（用于兼容旧代码）"""
         base = Path(self.data_dir) / "media"
         return [base / "movies", base / "tv", base / "anime"]
+
+    @property
+    def movies_dir_path(self) -> Path:
+        """电影库绝对路径（优先级：环境变量 > UI设置 > 数据库 > 默认）"""
+        if self.movies_dir:
+            p = Path(self.movies_dir)
+            p.mkdir(parents=True, exist_ok=True)
+            return p
+        return Path(self.data_dir) / "media" / "movies"
+
+    @property
+    def tv_dir_path(self) -> Path:
+        """剧集库绝对路径"""
+        if self.tv_dir:
+            p = Path(self.tv_dir)
+            p.mkdir(parents=True, exist_ok=True)
+            return p
+        return Path(self.data_dir) / "media" / "tv"
+
+    @property
+    def anime_dir_path(self) -> Path:
+        """动漫库绝对路径"""
+        if self.anime_dir:
+            p = Path(self.anime_dir)
+            p.mkdir(parents=True, exist_ok=True)
+            return p
+        return Path(self.data_dir) / "media" / "anime"
 
     @property
     def download_dir(self) -> Path:

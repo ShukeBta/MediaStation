@@ -229,6 +229,7 @@ class SubscribeService:
         self.db.add(site)
         await self.db.flush()
         await self.db.refresh(site)
+        await self.db.commit()  # 提交事务
         return SiteOut.model_validate(site)
 
     async def update_site(self, site_id: int, data: SiteUpdate) -> SiteOut:
@@ -238,12 +239,14 @@ class SubscribeService:
             setattr(site, k, v)
         await self.db.flush()
         await self.db.refresh(site)
+        await self.db.commit()  # 提交事务
         return SiteOut.model_validate(site)
 
     async def delete_site(self, site_id: int):
         site = await self._get_site(site_id)
         await self.db.delete(site)
         await self.db.flush()
+        await self.db.commit()  # 提交事务
 
     async def test_site(self, site_id: int) -> dict:
         site = await self._get_site(site_id)
@@ -252,6 +255,7 @@ class SubscribeService:
         site.login_status = "ok" if connected else "failed"
         site.last_check = datetime.now(timezone.utc)
         await self.db.flush()
+        await self.db.commit()  # 提交事务
         return {"connected": connected, "message": message}
 
     async def browse_site_resource(

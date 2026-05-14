@@ -4,11 +4,11 @@
 import logging
 from typing import Any
 
-from sqlalchemy import select, func, delete
+from sqlalchemy import select, func, delete, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.database import async_session_factory
+from app.database import get_db_session
 from app.playlist.models import Playlist, PlaylistItem
 from app.playlist.schemas import (
     PlaylistCreate,
@@ -28,14 +28,13 @@ class PlaylistService:
 
     async def list_playlists(self, user_id: int, include_public: bool = True) -> list[PlaylistOut]:
         """列出用户的播放列表"""
-        async with async_session_factory() as db:
-            query = select(Playlist).where(
-                Playlist.user_id == user_id
-            )
+        async with get_db_session() as db:
             if include_public:
-                query = query.where(
-                    (Playlist.user_id == user_id) | (Playlist.is_public == True)
+                query = select(Playlist).where(
+                    or_(Playlist.user_id == user_id, Playlist.is_public == True)
                 )
+            else:
+                query = select(Playlist).where(Playlist.user_id == user_id)
             
             query = query.order_by(Playlist.updated_at.desc())
             result = await db.execute(query)
@@ -50,9 +49,11 @@ class PlaylistService:
                 )
                 item_count = count_result.scalar() or 0
                 
+                # 计算总时长：从 PlaylistItem 出发 JOIN MediaItem
                 duration_result = await db.execute(
                     select(func.sum(MediaItem.duration))
-                    .join(PlaylistItem, PlaylistItem.media_item_id == MediaItem.id)
+                    .select_from(PlaylistItem)
+                    .join(MediaItem, PlaylistItem.media_item_id == MediaItem.id)
                     .where(PlaylistItem.playlist_id == p.id)
                 )
                 total_duration = duration_result.scalar() or 0
@@ -74,7 +75,7 @@ class PlaylistService:
 
     async def get_playlist(self, playlist_id: int, user_id: int) -> PlaylistDetailOut | None:
         """获取播放列表详情"""
-        async with async_session_factory() as db:
+        async with get_db_session() as db:
             # 查询播放列表
             query = select(Playlist).where(Playlist.id == playlist_id)
             result = await db.execute(query)
@@ -128,7 +129,7 @@ class PlaylistService:
 
     async def create_playlist(self, user_id: int, data: PlaylistCreate) -> PlaylistOut:
         """创建播放列表"""
-        async with async_session_factory() as db:
+        async with get_db_session() as db:
             playlist = Playlist(
                 user_id=user_id,
                 name=data.name,
@@ -159,7 +160,7 @@ class PlaylistService:
         data: PlaylistUpdate
     ) -> PlaylistOut | None:
         """更新播放列表"""
-        async with async_session_factory() as db:
+        async with get_db_session() as db:
             playlist = await db.get(Playlist, playlist_id)
             
             if not playlist or playlist.user_id != user_id:
@@ -199,7 +200,7 @@ class PlaylistService:
 
     async def delete_playlist(self, playlist_id: int, user_id: int) -> bool:
         """删除播放列表"""
-        async with async_session_factory() as db:
+        async with get_db_session() as db:
             playlist = await db.get(Playlist, playlist_id)
             
             if not playlist or playlist.user_id != user_id:
@@ -216,7 +217,7 @@ class PlaylistService:
         data: PlaylistItemAdd
     ) -> PlaylistItemOut | None:
         """添加项目到播放列表"""
-        async with async_session_factory() as db:
+        async with get_db_session() as db:
             playlist = await db.get(Playlist, playlist_id)
             
             if not playlist or playlist.user_id != user_id:
@@ -278,7 +279,7 @@ class PlaylistService:
         user_id: int
     ) -> bool:
         """从播放列表移除项目"""
-        async with async_session_factory() as db:
+        async with get_db_session() as db:
             playlist = await db.get(Playlist, playlist_id)
             
             if not playlist or playlist.user_id != user_id:
@@ -300,7 +301,7 @@ class PlaylistService:
         item_ids: list[int]
     ) -> bool:
         """重新排序播放列表项"""
-        async with async_session_factory() as db:
+        async with get_db_session() as db:
             playlist = await db.get(Playlist, playlist_id)
             
             if not playlist or playlist.user_id != user_id:

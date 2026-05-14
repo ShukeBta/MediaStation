@@ -35,6 +35,12 @@ async def create_client(data: DownloadClientCreate, user: AdminUser, db: DB):
     return await service.create_client(data)
 
 
+@router.get("/download/clients/{client_id}", response_model=DownloadClientOut)
+async def get_client(client_id: int, user: CurrentUser, db: DB):
+    service = DownloadService(db)
+    return await service.get_client(client_id)
+
+
 @router.put("/download/clients/{client_id}", response_model=DownloadClientOut)
 async def update_client(client_id: int, data: DownloadClientUpdate, user: AdminUser, db: DB):
     service = DownloadService(db)

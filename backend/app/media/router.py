@@ -117,11 +117,12 @@ async def scrape_media(item_id: int, request: ScrapeRequest, user: AdminUser, db
 @router.get("/search/tmdb")
 async def search_tmdb(
     user: CurrentUser,
+    db: DB,
     query: str = Query(..., min_length=1),
     media_type: str = Query("movie", pattern=r"^(movie|tv)$"),
     page: int = Query(1, ge=1),
 ):
-    service = MediaService(MediaRepository(None), get_event_bus())
+    service = MediaService(MediaRepository(db), get_event_bus(), db=db)
     return await service.search_tmdb(query, media_type, page)
 
 @router.get("/search/douban")

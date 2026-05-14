@@ -9,20 +9,29 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy import text
 
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 engine: AsyncEngine | None = None
-async_session_factory: async_sessionmaker[AsyncSession] | None = None
+_async_session_factory: async_sessionmaker[AsyncSession] | None = None
+
+
+def __getattr__(name: str):
+    """Lazy-init: modules that do `from app.database import async_session_factory`
+    will always get a valid session factory, never None.
+    """
+    if name == "async_session_factory":
+        return get_session_factory()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _is_postgresql(url: str) -> bool:
@@ -46,18 +55,42 @@ def _build_engine() -> AsyncEngine:
         )
     else:
         logger.info(f"Using SQLite database: {url.rsplit('/', 1)[-1]}")
-        return create_async_engine(
+
+        # Pre-set WAL mode on the database file directly (persistent across all connections)
+        import sqlite3
+        import os
+        db_path = url.replace("sqlite+aiosqlite:///", "").replace("sqlite:///", "")
+        if db_path and not db_path.startswith(":"):
+            try:
+                os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
+                raw = sqlite3.connect(db_path)
+                raw.execute("PRAGMA journal_mode=WAL")
+                raw.execute("PRAGMA synchronous=NORMAL")
+                raw.close()
+                logger.info("SQLite WAL mode enabled (pre-init)")
+            except Exception as e:
+                logger.warning(f"Could not pre-set SQLite PRAGMAs: {e}")
+
+        eng = create_async_engine(
             url,
             echo=settings.app_debug,
-            connect_args={"check_same_thread": False},
+            connect_args={"check_same_thread": False, "timeout": 30},
         )
+
+        def _set_sqlite_pragma(dbapi_connection, connection_record):
+            """Ensure busy_timeout is set on every connection (WAL is already persistent)."""
+            if isinstance(dbapi_connection, sqlite3.Connection):
+                dbapi_connection.execute("PRAGMA busy_timeout=5000")
+
+        event.listen(eng.sync_engine, "connect", _set_sqlite_pragma)
+        return eng
 
 
 def get_engine() -> AsyncEngine:
-    global engine, async_session_factory
+    global engine, _async_session_factory
     if engine is None:
         engine = _build_engine()
-        async_session_factory = async_sessionmaker(
+        _async_session_factory = async_sessionmaker(
             engine, class_=AsyncSession, expire_on_commit=False
         )
     return engine
@@ -65,23 +98,23 @@ def get_engine() -> AsyncEngine:
 
 def get_session_factory() -> async_sessionmaker[AsyncSession]:
     """获取 session factory，如果未初始化则自动初始化"""
-    global async_session_factory
+    global _async_session_factory
     
     # 如果未初始化，先初始化 engine 和 session factory
-    if async_session_factory is None:
+    if _async_session_factory is None:
         get_engine()
     
     # 双重检查：如果还是 None，直接创建
-    if async_session_factory is None:
+    if _async_session_factory is None:
         from app.config import get_settings
         settings = get_settings()
-        engine = _build_engine()
-        async_session_factory = async_sessionmaker(
-            engine, class_=AsyncSession, expire_on_commit=False
+        eng = _build_engine()
+        _async_session_factory = async_sessionmaker(
+            eng, class_=AsyncSession, expire_on_commit=False
         )
         logger.warning("async_session_factory was None, created directly in get_session_factory()")
     
-    return async_session_factory
+    return _async_session_factory
 
 
 @asynccontextmanager
@@ -150,12 +183,10 @@ async def _create_pg_indexes(eng: AsyncEngine):
 
 
 async def close_db():
-    global engine, async_session_factory
+    global engine, _async_session_factory
     if engine is None:
         return
     await engine.dispose()
     engine = None
-    async_session_factory = None
-    logger.info("Database connection closed")
-    async_session_factory = None
+    _async_session_factory = None
     logger.info("Database connection closed")

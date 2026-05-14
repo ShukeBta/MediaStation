@@ -932,6 +932,7 @@ class SiteResourceBrowser:
     ) -> tuple[list[SiteResource], int]:
         """NexusPHP 站点浏览"""
         resources = []
+        total = 0
         try:
             params: dict[str, Any] = {
                 "search": keyword or "",

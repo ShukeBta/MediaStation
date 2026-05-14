@@ -22,6 +22,18 @@ from app.media.models import MediaItem
 from app.media.repository import MediaRepository
 from app.playback.transcoder import TranscodeProfile, Transcoder
 
+# 全局转码器实例
+_transcoder_instance: "Transcoder | None" = None
+
+def get_transcoder() -> "Transcoder | None":
+    """获取转码器实例（用于关闭）"""
+    global _transcoder_instance
+    # 如果实例不存在，创建一个
+    if _transcoder_instance is None:
+        from app.playback.transcoder import Transcoder
+        _transcoder_instance = Transcoder()
+    return _transcoder_instance
+
 logger = logging.getLogger(__name__)
 
 # 浏览器原生支持的容器格式

@@ -73,17 +73,16 @@ class UserService:
         tier = getattr(data, "tier", "free")
         user = await self.repo.create(data.username, hashed, data.role, tier=tier)
 
-        # 自动创建默认权限记录
-        from app.database import async_session_factory
-        async with async_session_factory() as session:
-            perms = UserPermission(user_id=user.id)
-            if data.role == "admin":
-                # 管理员默认开启所有权限
-                for col in UserPermission.__table__.columns:
-                    if col.name not in ("id", "user_id", "created_at", "updated_at"):
-                        setattr(perms, col.name, True)
-            session.add(perms)
-            await session.commit()
+        # 自动创建默认权限记录（使用同一个 session，避免 database locked）
+        perms = UserPermission(user_id=user.id)
+        if data.role == "admin":
+            # 管理员默认开启所有权限
+            for col in UserPermission.__table__.columns:
+                if col.name not in ("id", "user_id", "created_at", "updated_at"):
+                    setattr(perms, col.name, True)
+        self.repo.db.add(perms)
+        await self.repo.db.commit()
+        await self.repo.db.refresh(perms)
 
         return UserOut.model_validate(user)
 
@@ -126,7 +125,8 @@ class UserService:
         if not user:
             raise NotFoundError("User", user_id)
         if not verify_password(data.old_password, user.password_hash):
-            raise UnauthorizedError("旧密码不正确")
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail="旧密码不正确")
         new_hash = hash_password(data.new_password)
         await self.repo.update(user_id, password_hash=new_hash)
 

@@ -75,23 +75,68 @@ class FileOrganizer:
 
     @classmethod
     async def from_settings(cls, db_session) -> "FileOrganizer":
-        """从数据库设置创建 FileOrganizer 实例"""
+        """从数据库设置创建 FileOrganizer 实例
+
+        目标目录优先级（参考 MoviePilot 设计）：
+        1. 环境变量/.env 配置的路径（MOVIES_DIR/TV_DIR/ANIME_DIR）
+           — 最高优先级，Docker 部署推荐方式
+        2. UI 设置的路径（settings 表 organize.movies_dir/tv_dir/anime_dir）
+           — 非 Docker 部署时用户在设置页面填写的目标文件夹
+        3. 数据库媒体库（MediaLibrary 表）中用户配置的库路径
+           — 媒体库管理页面设置的路径
+        4. 默认路径 {data_dir}/media/{movies|tv|anime}
+           — 最终兜底，确保永远有有效路径
+        """
         from app.config import get_settings
         from app.system.settings_service import SettingsService
 
         settings = get_settings()
 
-        # 获取媒体库目录
-        movies_dir = ""
-        tv_dir = ""
-        anime_dir = ""
+        # ── 1. 环境变量/.env 配置的路径（Docker Volume 模式，最高优先级）──
+        movies_dir = str(settings.movies_dir_path) if settings.movies_dir else ""
+        tv_dir = str(settings.tv_dir_path) if settings.tv_dir else ""
+        anime_dir = str(settings.anime_dir_path) if settings.anime_dir else ""
 
+        # ── 2. UI 设置的目标文件夹（settings 键值对）──
+        # 用户在"整理规则"设置页面的目标文件夹区域填写
         try:
-            service = SettingsService(db_session)
-            # 从设置获取媒体库路径（如果有的话）
-            # 目前使用 config 中的 media_dirs
+            svc = SettingsService(db_session)
+            ui_movies = await svc.get("organize.movies_dir")
+            ui_tv = await svc.get("organize.tv_dir")
+            ui_anime = await svc.get("organize.anime_dir")
+
+            if ui_movies and not movies_dir:
+                movies_dir = ui_movies.strip()
+            if ui_tv and not tv_dir:
+                tv_dir = ui_tv.strip()
+            if ui_anime and not anime_dir:
+                anime_dir = ui_anime.strip()
         except Exception:
             pass
+
+        # ── 3. 数据库媒体库 MediaLibrary 表中的路径 ──
+        if not movies_dir or not tv_dir or not anime_dir:
+            try:
+                from app.media.repository import MediaRepository
+                repo = MediaRepository(db_session)
+                libraries = await repo.get_all_libraries()
+                for lib in libraries:
+                    if lib.media_type == "movie" and not movies_dir:
+                        movies_dir = lib.path
+                    elif lib.media_type == "tv" and not tv_dir:
+                        tv_dir = lib.path
+                    elif lib.media_type == "anime" and not anime_dir:
+                        anime_dir = lib.path
+            except Exception:
+                pass
+
+        # ── 4. 仍未配置的类型使用默认路径作为兜底 ──
+        if not movies_dir:
+            movies_dir = str(settings.movies_dir_path)
+        if not tv_dir:
+            tv_dir = str(settings.tv_dir_path)
+        if not anime_dir:
+            anime_dir = str(settings.anime_dir_path)
 
         # 获取重命名模板
         rename_templates = {}

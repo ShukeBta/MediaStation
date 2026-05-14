@@ -1033,6 +1033,35 @@ async def list_profiles(user: AdminUser):
     """获取播放配置列表"""
     return SuccessResponse.ok(_profiles)
 
+@router.post("/profiles", summary="创建播放配置")
+async def create_profile(user: AdminUser, data: dict = Body(...)):
+    """创建新的播放配置"""
+    if not data.get("name"):
+        raise HTTPException(status_code=400, detail="name is required")
+    import uuid
+    profile_id = data.get("id") or str(uuid.uuid4())[:8]
+    profile = {
+        "id": profile_id,
+        "name": data["name"],
+        "type": data.get("type", "directplay"),
+        "quality": data.get("quality", "original"),
+    }
+    _profiles.append(profile)
+    return SuccessResponse.ok(profile)
+
+@router.delete("/profiles/{profile_id}", summary="删除播放配置")
+async def delete_profile(profile_id: str, user: AdminUser):
+    """删除播放配置"""
+    global _profiles
+    profile = next((p for p in _profiles if p["id"] == profile_id), None)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    if profile_id == "default":
+        raise HTTPException(status_code=400, detail="Cannot delete default profile")
+    _profiles = [p for p in _profiles if p["id"] != profile_id]
+    return MessageResponse.ok(f"Profile {profile_id} deleted")
+
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # AI 助手  /api/admin/assistant/*

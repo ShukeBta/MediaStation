@@ -94,6 +94,23 @@
       <button @click="openCreate" class="btn-primary mt-4">创建第一个 Profile</button>
     </div>
 
+    <!-- 确认弹窗 -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="showConfirm" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="showConfirm = false" />
+          <div class="relative card rounded-2xl w-full max-w-sm p-6 space-y-4" style="background: var(--bg-card)">
+            <div class="text-lg font-semibold">确认删除</div>
+            <p class="text-sm" style="color: var(--text-muted)">{{ confirmMessage }}</p>
+            <div class="flex gap-3 justify-end">
+              <button @click="showConfirm = false" class="btn-ghost">取消</button>
+              <button @click="executeConfirm" class="btn-primary bg-red-500 hover:bg-red-600">确认删除</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
     <!-- Toast -->
     <Teleport to="body">
       <Transition name="toast">
@@ -300,6 +317,9 @@ const loading = ref(false)
 const saving = ref(false)
 const showForm = ref(false)
 const showUsage = ref(false)
+const showConfirm = ref(false)
+const confirmAction = ref<(() => void) | null>(null)
+const confirmMessage = ref('')
 const editingId = ref<number | null>(null)
 const usageData = ref<any>(null)
 const toast = ref({ show: false, msg: '', success: true })
@@ -407,14 +427,24 @@ async function saveProfile() {
   }
 }
 
-async function deleteProfile(id: number) {
-  if (!confirm('确定删除此 Profile？')) return
-  try {
-    await api.delete(`/api/admin/profiles/${id}`)
-    showToast('Profile 已删除')
-    await loadProfiles()
-  } catch {
-    showToast('删除失败', false)
+function deleteProfile(id: number) {
+  confirmMessage.value = '确定删除此 Profile？此操作不可撤销。'
+  confirmAction.value = async () => {
+    try {
+      await api.delete(`/api/admin/profiles/${id}`)
+      showToast('Profile 已删除')
+      await loadProfiles()
+    } catch (e: any) {
+      showToast(e.response?.data?.detail || '删除失败', false)
+    }
+  }
+  showConfirm.value = true
+}
+
+async function executeConfirm() {
+  showConfirm.value = false
+  if (confirmAction.value) {
+    await confirmAction.value()
   }
 }
 

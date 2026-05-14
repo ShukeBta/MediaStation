@@ -216,46 +216,34 @@ class PathValidator:
     def is_safe(self, path: str) -> tuple[bool, str | None]:
         """
         验证路径是否安全（Issue #57 核心修复）
-        
+
         安全检查流程：
-        1. 解析为绝对路径
-        2. 检查是否包含 .. 穿越组件
-        3. 检查是否在阻止的系统目录下
-        4. 检查是否在允许的目录下
-        
+        1. 用 pathlib.Path.resolve() 解析路径（自动处理 Windows/Unix 绝对/相对路径）
+        2. 检查是否在阻止的系统目录下
+        3. 检查是否在允许的目录下
+
         Args:
             path: 待验证的路径
-            
+
         Returns:
             (是否安全, 错误信息或 None)
         """
-        import os
-        
         try:
             # Step 1: 解析路径
-            # 移除首部斜杠防止绝对路径注入
-            clean_path = path.lstrip("/\\")
-            abs_path = (pathlib.Path("/") / clean_path).resolve()
-            
-            # Step 2: 检查是否包含 .. 穿越组件（双重检查）
-            # 如果解析后的路径和清理后的路径不一致，说明有穿越
-            try:
-                abs_path.relative_to(pathlib.Path("/"))
-            except ValueError:
-                return False, "非法路径"
-            
-            # Step 3: 检查阻止的系统目录
+            abs_path = pathlib.Path(path).resolve()
+
+            # Step 2: 检查阻止的系统目录
             blocked, error = self._is_in_blocked_path(abs_path)
             if blocked:
                 return False, error
-            
-            # Step 4: 检查是否在允许的目录下
+
+            # Step 3: 检查是否在允许的目录下
             allowed, error = self._is_in_allowed_path(abs_path)
             if allowed:
                 return True, None
-            
+
             return False, error or "路径不在允许的目录内"
-            
+
         except Exception as e:
             return False, f"路径验证失败: {e}"
     

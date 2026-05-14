@@ -13,6 +13,57 @@
         配置下载完成后的自动整理规则，支持 Jinja2 模板语法
       </p>
 
+      <!-- 目标目录配置 -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- 电影目录 -->
+        <div>
+          <label class="block text-sm mb-1.5" style="color: var(--text-muted)">电影目录</label>
+          <div class="flex gap-2">
+            <input
+              v-model="form.organize.movies_dir"
+              class="input flex-1 text-xs"
+              placeholder="留空使用默认目录"
+            />
+            <button @click="browseDir('movies')" class="btn-secondary text-xs px-3">
+              浏览
+            </button>
+          </div>
+          <p class="text-xs mt-1" style="color: var(--text-faint)">当前: {{ currentMoviesDir }}</p>
+        </div>
+
+        <!-- 剧集目录 -->
+        <div>
+          <label class="block text-sm mb-1.5" style="color: var(--text-muted)">剧集目录</label>
+          <div class="flex gap-2">
+            <input
+              v-model="form.organize.tv_dir"
+              class="input flex-1 text-xs"
+              placeholder="留空使用默认目录"
+            />
+            <button @click="browseDir('tv')" class="btn-secondary text-xs px-3">
+              浏览
+            </button>
+          </div>
+          <p class="text-xs mt-1" style="color: var(--text-faint)">当前: {{ currentTvDir }}</p>
+        </div>
+
+        <!-- 动漫目录 -->
+        <div>
+          <label class="block text-sm mb-1.5" style="color: var(--text-muted)">动漫目录</label>
+          <div class="flex gap-2">
+            <input
+              v-model="form.organize.anime_dir"
+              class="input flex-1 text-xs"
+              placeholder="留空使用默认目录"
+            />
+            <button @click="browseDir('anime')" class="btn-secondary text-xs px-3">
+              浏览
+            </button>
+          </div>
+          <p class="text-xs mt-1" style="color: var(--text-faint)">当前: {{ currentAnimeDir }}</p>
+        </div>
+      </div>
+
       <!-- 电影重命名格式 -->
       <div>
         <div class="flex items-center justify-between mb-1.5">
@@ -322,12 +373,82 @@
       </svg>
       {{ savedMsg.text }}
     </div>
+
+    <!-- 目录浏览对话框 -->
+    <div v-if="browseDialog" class="fixed inset-0 z-50 flex items-center justify-center">
+      <!-- 遮罩 -->
+      <div class="absolute inset-0 bg-black/60" @click="browseDialog = false"></div>
+
+      <!-- 对话框 -->
+      <div class="relative bg-[var(--bg-elevated)] rounded-xl shadow-2xl w-[600px] max-h-[70vh] flex flex-col border border-[var(--border-primary)]">
+        <!-- 标题 -->
+        <div class="flex items-center justify-between p-4 border-b border-[var(--border-primary)]">
+          <h3 class="text-lg font-medium">
+            选择 {{ browseType === 'movies' ? '电影' : browseType === 'tv' ? '剧集' : '动漫' }} 目录
+          </h3>
+          <button @click="browseDialog = false" class="p-1 hover:bg-[var(--bg-hover)] rounded">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- 当前路径 -->
+        <div class="p-3 border-b border-[var(--border-primary)] bg-[var(--bg-secondary)]">
+          <div class="flex items-center gap-2">
+            <input
+              v-model="browsePath"
+              class="input flex-1 text-sm"
+              placeholder="输入路径或双击下方目录进入..."
+              @keyup.enter="enterDir(browsePath)"
+            />
+            <button @click="enterDir(browsePath)" class="btn-secondary text-sm">跳转</button>
+          </div>
+        </div>
+
+        <!-- 目录列表 -->
+        <div class="flex-1 overflow-y-auto p-2 max-h-[400px]">
+          <div v-if="browseLoading" class="flex items-center justify-center py-8">
+            <svg class="w-6 h-6 animate-spin text-brand-400" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+          </div>
+          <div v-else-if="browseItems.length === 0" class="text-center py-8 text-sm" style="color: var(--text-muted)">
+            目录为空或无法访问
+          </div>
+          <div v-else class="space-y-1">
+            <div
+              v-for="item in browseItems.filter(i => i.is_directory)"
+              :key="item.path"
+              @click="enterDir(item.path)"
+              class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--bg-hover)] cursor-pointer"
+            >
+              <span class="text-lg">📁</span>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm truncate">{{ item.name }}</p>
+                <p class="text-xs truncate" style="color: var(--text-faint)">{{ item.path }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 底部操作 -->
+        <div class="flex items-center justify-end gap-3 p-4 border-t border-[var(--border-primary)]">
+          <button @click="browseDialog = false" class="btn-secondary text-sm">取消</button>
+          <button @click="selectCurrentDir" class="btn-primary text-sm">
+            选择当前目录
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { settingsApi } from '@/api/settings'
+import { adminApi } from '@/api/admin'
 
 // 可用的数据源列表
 const availableProviders = [
@@ -340,6 +461,9 @@ const availableProviders = [
 // 表单数据
 const form = ref({
   organize: {
+    movies_dir: '',
+    tv_dir: '',
+    anime_dir: '',
     mode: 'move_to_library',
     movie_rename_format: '{{title}}{% if year %} ({{year}}){% endif %}/{{title}}{% if year %} ({{year}}){% endif %}{% if resolution %} - {{resolution}}{% endif %}{{fileExt}}',
     tv_rename_format: '{{title}}{% if year %} ({{year}}){% endif %}/Season {{season}}/{{title}} - {{season_episode}}{% if episode %} - 第 {{episode}} 集{% endif %}{{fileExt}}',
@@ -362,6 +486,9 @@ const form = ref({
 // 默认值（用于重置）
 const defaults = {
   organize: {
+    movies_dir: '',
+    tv_dir: '',
+    anime_dir: '',
     mode: 'move_to_library',
     movie_rename_format: '{{title}}{% if year %} ({{year}}){% endif %}/{{title}}{% if year %} ({{year}}){% endif %}{% if resolution %} - {{resolution}}{% endif %}{{fileExt}}',
     tv_rename_format: '{{title}}{% if year %} ({{year}}){% endif %}/Season {{season}}/{{title}} - {{season_episode}}{% if episode %} - 第 {{episode}} 集{% endif %}{{fileExt}}',
@@ -379,6 +506,114 @@ const defaults = {
     auto_scrape_on_add: 'true',
     overwrite_existing: 'false',
   },
+}
+
+// 默认目录（后端 fallback）
+const defaultMoviesDir = ref('')
+const defaultTvDir = ref('')
+const defaultAnimeDir = ref('')
+
+// 当前生效的目录（用户配置 > 默认）
+const currentMoviesDir = computed(() => form.value.organize.movies_dir || defaultMoviesDir.value || '未设置')
+const currentTvDir = computed(() => form.value.organize.tv_dir || defaultTvDir.value || '未设置')
+const currentAnimeDir = computed(() => form.value.organize.anime_dir || defaultAnimeDir.value || '未设置')
+
+// 目录浏览相关状态
+const browseDialog = ref(false)
+const browseType = ref<'movies' | 'tv' | 'anime'>('movies')
+const browsePath = ref('')
+const browseItems = ref<any[]>([])
+const browseLoading = ref(false)
+
+// 浏览目录
+async function browseDir(type: 'movies' | 'tv' | 'anime') {
+  browseType.value = type
+  browseDialog.value = true
+  browseLoading.value = true
+
+  // 使用当前已输入的路径作为起始目录
+  let startPath = ''
+  if (type === 'movies' && form.value.organize.movies_dir) {
+    startPath = form.value.organize.movies_dir
+  } else if (type === 'tv' && form.value.organize.tv_dir) {
+    startPath = form.value.organize.tv_dir
+  } else if (type === 'anime' && form.value.organize.anime_dir) {
+    startPath = form.value.organize.anime_dir
+  }
+
+  browsePath.value = startPath
+
+  try {
+    const { data } = await adminApi.browseFiles(startPath || '.')
+    browseItems.value = data.items || []
+  } catch (e) {
+    console.error('浏览目录失败:', e)
+    browseItems.value = []
+  } finally {
+    browseLoading.value = false
+  }
+}
+
+// 进入子目录
+async function enterDir(path: string) {
+  browseLoading.value = true
+  browsePath.value = path
+  try {
+    const { data } = await adminApi.browseFiles(path)
+    browseItems.value = data.items || []
+  } catch (e) {
+    console.error('进入目录失败:', e)
+  } finally {
+    browseLoading.value = false
+  }
+}
+
+// 选择当前目录
+function selectCurrentDir() {
+  if (browseType.value === 'movies') {
+    form.value.organize.movies_dir = browsePath.value
+  } else if (browseType.value === 'tv') {
+    form.value.organize.tv_dir = browsePath.value
+  } else {
+    form.value.organize.anime_dir = browsePath.value
+  }
+  browseDialog.value = false
+}
+
+// 加载默认目录
+async function loadDefaultDirs() {
+  try {
+    const { data } = await adminApi.browseFiles('.')
+    // 从初始目录获取媒体目录
+    if (data.items) {
+      // 尝试从 data/media/movies 等获取默认路径
+      for (const item of data.items) {
+        if (item.is_directory && item.name === 'data') {
+          try {
+            const { data: mediaData } = await adminApi.browseFiles(item.path)
+            if (mediaData.items) {
+              for (const m of mediaData.items) {
+                if (m.is_directory && m.name === 'media') {
+                  const { data: typeData } = await adminApi.browseFiles(m.path)
+                  if (typeData.items) {
+                    for (const t of typeData.items) {
+                      if (t.is_directory && t.name === 'movies') {
+                        defaultMoviesDir.value = t.path
+                      } else if (t.is_directory && t.name === 'tv') {
+                        defaultTvDir.value = t.path
+                      } else if (t.is_directory && t.name === 'anime') {
+                        defaultAnimeDir.value = t.path
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          } catch {}
+        }
+      }
+    }
+  } catch {}
 }
 
 const saving = ref(false)
@@ -412,6 +647,15 @@ async function loadSettings() {
   try {
     const { data } = await settingsApi.getAll()
     // 填充整理配置
+    if (data['organize.movies_dir']) {
+      form.value.organize.movies_dir = data['organize.movies_dir']
+    }
+    if (data['organize.tv_dir']) {
+      form.value.organize.tv_dir = data['organize.tv_dir']
+    }
+    if (data['organize.anime_dir']) {
+      form.value.organize.anime_dir = data['organize.anime_dir']
+    }
     if (data['organize.movie_rename_format']) {
       form.value.organize.movie_rename_format = data['organize.movie_rename_format']
     }
@@ -454,7 +698,10 @@ async function save() {
   try {
     const settings: Record<string, string> = {}
 
-    // 整理配置
+    // 整理配置（包括目录路径）
+    settings['organize.movies_dir'] = form.value.organize.movies_dir
+    settings['organize.tv_dir'] = form.value.organize.tv_dir
+    settings['organize.anime_dir'] = form.value.organize.anime_dir
     settings['organize.movie_rename_format'] = form.value.organize.movie_rename_format
     settings['organize.tv_rename_format'] = form.value.organize.tv_rename_format
     settings['organize.anime_rename_format'] = form.value.organize.anime_rename_format
@@ -494,5 +741,8 @@ async function save() {
   }
 }
 
-onMounted(() => loadSettings())
+onMounted(() => {
+  loadSettings()
+  loadDefaultDirs()
+})
 </script>

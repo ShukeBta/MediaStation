@@ -48,8 +48,8 @@ def _get_random_headers(referer: str = "https://movie.douban.com/") -> dict[str,
         "Referer": referer,
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive",
+        # 禁用压缩，避免 httpx 解压问题
+        "Accept-Encoding": "identity",
     }
 
 
@@ -124,6 +124,30 @@ class DoubanClient:
                 follow_redirects=True,
             )
         return self._client
+
+    async def get_hot_subjects(self, params: dict) -> dict | None:
+        """
+        获取豆瓣热门榜单（使用限流请求）
+        包装 _rate_limited_request，确保正确的 Headers 和限流
+        """
+        try:
+            resp = await _rate_limited_request(
+                self.client,
+                "GET",
+                "/j/search_subjects",
+                params=params
+            )
+            if resp.status_code == 200:
+                try:
+                    return resp.json()
+                except Exception as json_err:
+                    logger.warning(f"Douban JSON parse failed: {json_err}")
+                    return None
+            else:
+                logger.warning(f"Douban hot subjects returned {resp.status_code}: {resp.text[:200]}")
+        except Exception as e:
+            logger.warning(f"Douban hot subjects fetch failed: {e}")
+        return None
 
     async def close(self):
         if self._client and not self._client.is_closed:

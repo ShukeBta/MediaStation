@@ -33,6 +33,10 @@ class DownloadService:
         result = await self.db.execute(select(DownloadClient).order_by(DownloadClient.id))
         return [DownloadClientOut.model_validate(c) for c in result.scalars().all()]
 
+    async def get_client(self, client_id: int) -> DownloadClientOut:
+        client = await self._get_client(client_id)
+        return DownloadClientOut.model_validate(client)
+
     async def create_client(self, data: DownloadClientCreate) -> DownloadClientOut:
         client = DownloadClient(**data.model_dump())
         self.db.add(client)
@@ -229,6 +233,10 @@ class DownloadService:
         from sqlalchemy import or_
 
         clients = await self.list_clients()
+        if not clients:
+            logger.debug("No download clients configured, skipping sync")
+            return
+        
         all_updates = []
         newly_completed_sub_ids: set[int] = set()  # 本次同步中新完成的订阅 ID
 
@@ -252,7 +260,7 @@ class DownloadService:
 
                 client_adapters.append((client_db, adapter, torrents))
             except Exception as e:
-                logger.error(f"Sync client {client_db.name} failed: {e}")
+                logger.warning(f"Sync client {client_db.name} (id={client_db.id}) failed: {e}")
 
         # ── 第二阶段：批量查询 DB ──
         # 按 hash 匹配

@@ -33,6 +33,19 @@ from app.license.schemas import (
 router = APIRouter(prefix="/license", tags=["license"])
 
 
+@router.get("/info")
+async def get_license_info(
+    current_user: User = Depends(get_current_user),
+):
+    """Get basic license information"""
+    is_plus = current_user.tier == "plus"
+    return {
+        "is_plus": is_plus,
+        "license_type": "permanent" if is_plus else "free",
+        "verification_mode": "local",
+    }
+
+
 def get_device_name() -> str:
     """Get current device name"""
     try:

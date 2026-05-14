@@ -419,12 +419,11 @@ async def _fetch_douban_section(section_key: str) -> dict:
             if cat_label:
                 params["type"] = cat_label
 
-            resp = await client.client.get("/j/search_subjects", params=params)
-            if resp.status_code == 200:
-                data = safe_json(resp, url_hint=f"douban_search:{section_key}")
-                if data:
-                    for s in data.get("subjects", []):
-                        items.append({
+            # 使用 get_hot_subjects（带限流和正确 Headers）
+            resp_data = await client.get_hot_subjects(params)
+            if resp_data:
+                for s in resp_data.get("subjects", []):
+                    items.append({
                         "id": f"douban_{section_key}_{s.get('id', '')}",
                         "douban_id": s.get("id"),
                         "title": s.get("title", ""),
@@ -437,21 +436,16 @@ async def _fetch_douban_section(section_key: str) -> dict:
 
         elif section_key == "douban_top250":
             # 豆瓣 TOP250
-            resp = await client.client.get(
-                "/j/search_subjects",
-                params={
-                    "type": "movie",
-                    "tag": "豆瓣Top250",
-                    "sort": "score",
-                    "page_limit": 20,
-                    "page_start": 0,
-                },
-            )
-            if resp.status_code == 200:
-                data = safe_json(resp, url_hint="douban_top250")
-                if data:
-                    for idx, s in enumerate(data.get("subjects", [])):
-                        items.append({
+            resp_data = await client.get_hot_subjects({
+                "type": "movie",
+                "tag": "豆瓣Top250",
+                "sort": "score",
+                "page_limit": 20,
+                "page_start": 0,
+            })
+            if resp_data:
+                for idx, s in enumerate(resp_data.get("subjects", [])):
+                    items.append({
                         "id": f"douban_top250_{s.get('id', '')}",
                         "douban_id": s.get("id"),
                         "rank": idx + 1,

@@ -343,7 +343,10 @@ class AdminService:
         if not self._is_safe_path(path):
             raise ValueError("Path not allowed")
 
-        path = pathlib.Path(path).resolve()
+        try:
+            path = pathlib.Path(path).resolve()
+        except FileNotFoundError:
+            raise ValueError("Path not found")
 
         if not path.exists():
             raise ValueError("Path not found")
@@ -964,41 +967,50 @@ class AdminService:
     def _is_safe_path(self, path: str) -> bool:
         """检查路径安全性"""
 
-        # 允许的根目录
-        allowed_roots = [
-            self.settings.data_dir,
-            self.settings.media_dirs[0] if self.settings.media_dirs else "/media",
-            "/mnt",
-            "/data",
-        ]
-
-        # 阻止的系统目录
-        blocked = [
-            "/proc", "/sys", "/dev", "/boot", "/etc",
-            "/run", "/snap", "/bin", "/sbin", "/lib",
-        ]
-
         try:
             abs_path = pathlib.Path(path).resolve()
 
+            # 允许的根目录（resolve 成绝对路径后再比较）
+            allowed_roots = [
+                pathlib.Path(self.settings.data_dir).resolve(),
+            ]
+            for d in self.settings.media_dirs:
+                try:
+                    p = pathlib.Path(d).resolve()
+                    if p.exists():
+                        allowed_roots.append(p)
+                except Exception:
+                    pass
+
             # 检查是否在允许的目录下
             for root in allowed_roots:
-                if str(abs_path).startswith(str(root)):
+                if abs_path.is_relative_to(root):
                     return True
 
             # 检查是否在阻止的目录下
-            for block in blocked:
-                if str(abs_path).startswith(block):
+            blocked_paths = [
+                "/proc", "/sys", "/dev", "/boot", "/etc",
+                "/run", "/snap", "/bin", "/sbin", "/lib",
+            ]
+            for block in blocked_paths:
+                block_lc = block.lower()
+                path_lc = str(abs_path).lower()
+                if path_lc == block_lc or path_lc.startswith(block_lc + "/") or path_lc.startswith(block_lc + "\\"):
                     return False
 
-            # Windows 特殊检查
+            # Windows 特殊阻止目录
             if os.name == 'nt':
-                windows_blocked = ["C:\\Windows", "C:\\Program Files", "C:\\Program Files (x86)"]
+                windows_blocked = [
+                    "C:\\Windows", "C:\\Program Files", "C:\\Program Files (x86)",
+                    "C:\\Windows\\System32",
+                ]
                 for block in windows_blocked:
-                    if str(abs_path).startswith(block):
+                    block_lc = block.lower()
+                    path_lc = str(abs_path).lower()
+                    if path_lc == block_lc or path_lc.startswith(block_lc + "\\"):
                         return False
 
-            # 允许其他路径（谨慎）
+            # 不在阻止目录内，默认允许
             return True
 
         except Exception:

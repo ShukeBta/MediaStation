@@ -129,7 +129,7 @@ class DownloadClientAdapter(ABC):
             settings = get_settings()
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,
-                timeout=30.0,
+                timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0),
                 follow_redirects=True,
                 verify=settings.verify_client_ssl,
             )
@@ -215,7 +215,7 @@ class QBittorrentAdapter(DownloadClientAdapter):
                 logger.error(f"qBittorrent login HTTP error: {resp.status_code}")
             return self._logged_in
         except Exception as e:
-            logger.error(f"qBittorrent connect error: {e}")
+            logger.warning(f"qBittorrent connect error ({self.base_url}): {e}")
             return False
 
     async def _ensure_login(self):
@@ -246,7 +246,8 @@ class QBittorrentAdapter(DownloadClientAdapter):
             from app.config import get_settings
             settings = get_settings()
             async with httpx.AsyncClient(
-                timeout=60.0, follow_redirects=True, verify=settings.verify_client_ssl
+                timeout=httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0),
+                follow_redirects=True, verify=settings.verify_client_ssl
             ) as http_client:
                 # HEAD 请求检查内容类型（不携带内部认证头，防止 Referer 泄露内网地址）
                 try:
@@ -1024,7 +1025,7 @@ class TransmissionAdapter(DownloadClientAdapter):
                 logger.info(f"Transmission connected: {self.base_url}")
             return self._logged_in
         except Exception as e:
-            logger.error(f"Transmission connect error: {e}")
+            logger.warning(f"Transmission connect error ({self.base_url}): {e}")
             return False
 
     async def add_torrent(
@@ -1121,7 +1122,7 @@ class Aria2Adapter(DownloadClientAdapter):
             settings = get_settings()
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,
-                timeout=60.0,   # Aria2 某些操作较慢
+                timeout=httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0),   # Aria2 某些操作较慢
                 follow_redirects=True,
                 verify=settings.verify_client_ssl,
                 headers={"Content-Type": "application/json"},
@@ -1173,7 +1174,7 @@ class Aria2Adapter(DownloadClientAdapter):
             self._logged_in = True
             return True
         except Exception as e:
-            logger.error(f"Aria2 connect error: {e}")
+            logger.warning(f"Aria2 connect error ({self.base_url}): {e}")
             return False
 
     async def add_torrent(

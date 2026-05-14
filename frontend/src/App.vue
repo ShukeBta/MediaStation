@@ -1,5 +1,13 @@
 <template>
-  <div class="flex h-screen overflow-hidden">
+  <!-- 登录页：独立全屏渲染，不包含侧边栏布局 -->
+  <router-view v-if="isGuestPage" v-slot="{ Component }">
+    <Transition name="page" mode="out-in">
+      <component :is="Component" />
+    </Transition>
+  </router-view>
+
+  <!-- 主应用布局：侧边栏 + 内容区 -->
+  <div v-else class="flex h-screen overflow-hidden">
     <!-- 移动端遮罩 -->
     <Transition name="fade">
       <div v-if="sidebarOpen" class="fixed inset-0 z-40 bg-black/50 md:hidden" @click="sidebarOpen = false" />
@@ -181,6 +189,9 @@ const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const sidebarOpen = ref(false)
+
+/** 登录页等 guest 页面独立渲染，不显示侧边栏布局 */
+const isGuestPage = computed(() => route.meta.guest === true)
 
 /* ====== 全局搜索 ====== */
 const searchInputRef = ref<HTMLInputElement | null>(null)
