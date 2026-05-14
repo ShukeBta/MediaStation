@@ -1,1 +1,0 @@
-import{W as p}from"./index-Cd804MDs.js";const t={discover:a=>p.get("/api/dlna/devices",{params:{force:a}}),cast:a=>p.post("/api/dlna/cast",a),play:a=>p.post(`/api/dlna/${a}/play`),pause:a=>p.post(`/api/dlna/${a}/pause`),stop:a=>p.post(`/api/dlna/${a}/stop`),status:a=>p.get(`/api/dlna/${a}/status`)};export{t as d};

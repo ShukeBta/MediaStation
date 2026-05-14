@@ -1,1 +1,0 @@
-import{S as r}from"./index-Buqm4Ojb.js";const l={getPlayInfo:(p,a)=>r.get(`/api/playback/${p}/info`,{params:a}),reportProgress:(p,a,e,o)=>r.post(`/api/playback/${p}/progress`,null,{params:{progress:a,duration:e,episode_id:o}}),getExternalUrl:(p,a)=>r.get(`/api/playback/${p}/external-url`,{params:a?{episode_id:a}:void 0})};export{l as p};
