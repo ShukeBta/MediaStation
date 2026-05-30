@@ -6,6 +6,11 @@
   <img src="https://img.shields.io/badge/License-GPL%20v3-blue.svg" alt="License">
 </p>
 
+## 此项目已弃用不再更新，如需使用请使用基于本项目的[MediaStationGo](https://github.com/ShukeBta/MediaStationGo)Go重构版
+
+[MediaStationGo](https://github.com/ShukeBta/MediaStationGo)
+[https://github.com/ShukeBta/MediaStationGo](https://github.com/ShukeBta/MediaStationGo)
+
 ## 项目简介
 
 MediaStation 是一个现代化的媒体资源管理系统，支持多平台资源聚合、订阅管理和自动化下载。
