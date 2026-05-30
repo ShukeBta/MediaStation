@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/License-GPL%20v3-blue.svg" alt="License">
 </p>
 
-## 此项目已弃用不再更新，如需使用请使用基于本项目的[MediaStationGo](https://github.com/ShukeBta/MediaStationGo)Go重构版
+## 此项目已于2026/4/23日弃用不再更新，如需使用请使用基于本项目的[MediaStationGo](https://github.com/ShukeBta/MediaStationGo)Go重构版
 
 [MediaStationGo](https://github.com/ShukeBta/MediaStationGo)
 [https://github.com/ShukeBta/MediaStationGo](https://github.com/ShukeBta/MediaStationGo)
